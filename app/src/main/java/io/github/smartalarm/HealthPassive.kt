@@ -89,9 +89,10 @@ object HealthLog {
     }
 }
 
-private fun prop(obj: Any, suffix: String): Any? =
+private fun prop(obj: Any?, suffix: String): Any? =
     try {
-        obj.javaClass.methods.firstOrNull { it.name == "get$suffix" && it.parameterCount == 0 }?.invoke(obj)
+        if (obj == null) "null"
+        else obj.javaClass.methods.firstOrNull { it.name == "get$suffix" && it.parameterCount == 0 }?.invoke(obj)
     } catch (t: Throwable) {
         "ERR:$t"
     }
@@ -99,26 +100,44 @@ private fun prop(obj: Any, suffix: String): Any? =
 object HealthPassive {
 
     fun start(ctx: Context): String {
-        return try {
-            val client = HealthServices.getClient(ctx)
-            val pm = client.passiveMonitoringClient
-            val config = PassiveListenerConfig.Builder()
+        val sb = StringBuilder()
+        val client = try {
+            HealthServices.getClient(ctx)
+        } catch (t: Throwable) {
+            return "нет клиента Health Services: $t"
+        }
+        val pm = client.passiveMonitoringClient
+
+        val variants = listOf<Pair<String, PassiveListenerConfig>>(
+            "hr+activity" to PassiveListenerConfig.Builder()
                 .setDataTypes(setOf(DataType.HEART_RATE_BPM))
                 .setShouldUserActivityInfoBeRequested(true)
-                .build()
-            val caps = pm.setPassiveListenerServiceAsync(PassiveService::class.java, config)
-                .get(20, TimeUnit.SECONDS)
-            HealthLog.raw(ctx, "${Instant.now()},${System.currentTimeMillis()},event,,passive_started")
-            buildString {
-                appendLine("PassiveMonitoring стартовал")
-                appendLine("dataTypes=${prop(caps, "SupportedDataTypesPassiveMonitoring")}")
-                appendLine("goals=${prop(caps, "SupportedDataTypesPassiveGoals")}")
-                appendLine("activityStates=${prop(caps, "SupportedUserActivityStates")}")
+                .build(),
+            "hr" to PassiveListenerConfig.Builder()
+                .setDataTypes(setOf(DataType.HEART_RATE_BPM))
+                .build(),
+        )
+
+        for ((name, cfg) in variants) {
+            try {
+                val caps = pm.setPassiveListenerServiceAsync(PassiveService::class.java, cfg)
+                    .get(20, TimeUnit.SECONDS)
+                sb.appendLine("OK variant=$name")
+                sb.appendLine("dataTypes=${prop(caps, "SupportedDataTypesPassiveMonitoring")}")
+                sb.appendLine("goals=${prop(caps, "SupportedDataTypesPassiveGoals")}")
+                sb.appendLine("activityStates=${prop(caps, "SupportedUserActivityStates")}")
+                HealthLog.raw(ctx, "${Instant.now()},${System.currentTimeMillis()},event,,passive_started:$name")
+                return sb.toString()
+            } catch (t: Throwable) {
+                sb.appendLine("FAIL variant=$name: $t")
+                sb.appendLine(t.stackTraceToString().take(1200))
+                try {
+                    pm.clearPassiveListenerServiceAsync().get(10, TimeUnit.SECONDS)
+                } catch (_: Throwable) {
+                }
             }
-        } catch (t: Throwable) {
-            HealthLog.raw(ctx, "${Instant.now()},${System.currentTimeMillis()},error,,start $t")
-            "Ошибка старта PassiveMonitoring: $t"
         }
+        return sb.toString()
     }
 
     fun stop(ctx: Context): String {
