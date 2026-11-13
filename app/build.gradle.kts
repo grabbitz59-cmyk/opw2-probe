@@ -38,7 +38,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-ktx:1.9.0")
     implementation("androidx.health.connect:connect-client:1.1.0")
-    implementation("androidx.health.services:health-services-client:1.1.0")
+    implementation("androidx.health:health-services-client:1.1.0")
     implementation("com.google.guava:guava:32.1.3-android")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
 }
