@@ -76,8 +76,9 @@ class ProbeActivity : ComponentActivity() {
             }.onFailure { append("HC launch error: $it") }
         }
 
-        btn("4 Старт: ЭКОНОМ (HR 1/5 мин)") { startLog(NightLogService.MODE_ECO) }
-        btn("5 Старт: ПОЛНЫЙ (HR 1/мин)") { startLog(NightLogService.MODE_FULL) }
+        btn("4 Старт: ЭКОНОМ (HR 1/5 мин)") { startLog(NightLogService.MODE_ECO, false) }
+        btn("5 Старт: ПОЛНЫЙ (HR 1/мин)") { startLog(NightLogService.MODE_FULL, false) }
+        btn("4b ЭКОНОМ без wakelock") { startLog(NightLogService.MODE_ECO, true) }
         btn("6 СТОП лог") { stopLog() }
         btn("7 Путь к файлам / итог") {
             append("running=${NightLogService.isRunning}")
@@ -85,6 +86,14 @@ class ProbeActivity : ComponentActivity() {
             append("dir=${extDir().absolutePath}")
             append(readSummary())
         }
+        btn("8 Сводка по последнему логу") {
+            Thread {
+                val f = Summary.latestCsv(extDir())
+                val text = if (f == null) "нет CSV в ${extDir().absolutePath}" else Summary.build(f)
+                runOnUiThread { append("=== Сводка ===\n$text") }
+            }.start()
+        }
+        btn("9 Тест будильника через 2 мин") { testAlarm() }
 
         val logScroll = ScrollView(this)
         logView = TextView(this).apply {
@@ -149,14 +158,38 @@ class ProbeActivity : ComponentActivity() {
         statusView.text = "$portraits | log=${NightLogService.isRunning}"
     }
 
-    private fun startLog(mode: String) {
+    private fun startLog(mode: String, noWake: Boolean) {
         val svc = Intent(this, NightLogService::class.java).apply {
             action = NightLogService.ACTION_START
             putExtra(NightLogService.EXTRA_MODE, mode)
+            putExtra(NightLogService.EXTRA_NOWAKELOCK, noWake)
         }
         ContextCompat.startForegroundService(this, svc)
-        append("Запуск лога: $mode")
+        append("Запуск лога: $mode${if (noWake) " (без wakelock)" else ""}")
         updateStatus()
+    }
+
+    private fun testAlarm() {
+        val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+        val pi = android.app.PendingIntent.getBroadcast(
+            this, 77,
+            Intent(this, AlarmTestReceiver::class.java),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+        )
+        val at = System.currentTimeMillis() + 120_000
+        try {
+            am.setAlarmClock(android.app.AlarmManager.AlarmClockInfo(at, pi), pi)
+            append("Будильник поставлен на ${java.time.Instant.ofEpochMilli(at)} (через 2 мин)")
+        } catch (t: Throwable) {
+            append("setAlarmClock не сработал: $t — ставлю обычный")
+            try {
+                am.set(android.app.AlarmManager.RTC_WAKEUP, at, pi)
+                append("Обычный будильник на ${java.time.Instant.ofEpochMilli(at)}")
+            } catch (t2: Throwable) {
+                append("Будильник не поставился: $t2")
+            }
+        }
+        append("Теперь можно свернуть приложение или переключить часы в энергосбережение и ждать вибрации.")
     }
 
     private fun stopLog() {

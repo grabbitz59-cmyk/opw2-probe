@@ -33,6 +33,7 @@ class NightLogService : Service(), SensorEventListener {
         const val ACTION_START = "io.github.smartalarm.START"
         const val ACTION_STOP = "io.github.smartalarm.STOP"
         const val EXTRA_MODE = "mode"
+        const val EXTRA_NOWAKELOCK = "nowakelock"
         const val MODE_ECO = "eco"
         const val MODE_FULL = "full"
 
@@ -141,9 +142,11 @@ class NightLogService : Service(), SensorEventListener {
         Prefs.setRunning(this, true)
 
         startInForeground("Старт…")
-        acquireWakeLock()
+        val noWake = intent?.getBooleanExtra(EXTRA_NOWAKELOCK, Prefs.noWake(this)) ?: Prefs.noWake(this)
+        Prefs.setNoWake(this, noWake)
+        if (!noWake) acquireWakeLock()
         openLog()
-        writeRaw("# start mode=$mode device=${Build.MODEL} sdk=${Build.VERSION.SDK_INT}")
+        writeRaw("# start mode=$mode wakelock=${!noWake} device=${Build.MODEL} sdk=${Build.VERSION.SDK_INT}")
         startBatteryReceiver()
 
         val ok = accel?.let { sm.registerListener(this, it, 40_000, 5_000_000, handler) } == true
@@ -357,4 +360,6 @@ object Prefs {
     fun mode(c: Context) = sp(c).getString("mode", NightLogService.MODE_ECO) ?: NightLogService.MODE_ECO
     fun setPath(c: Context, v: String) = sp(c).edit().putString("path", v).apply()
     fun path(c: Context) = sp(c).getString("path", "") ?: ""
+    fun setNoWake(c: Context, v: Boolean) = sp(c).edit().putBoolean("nowake", v).apply()
+    fun noWake(c: Context) = sp(c).getBoolean("nowake", false)
 }

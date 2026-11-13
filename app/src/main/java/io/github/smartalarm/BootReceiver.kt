@@ -12,6 +12,7 @@ class BootReceiver : BroadcastReceiver() {
         val svc = Intent(context, NightLogService::class.java).apply {
             action = NightLogService.ACTION_START
             putExtra(NightLogService.EXTRA_MODE, Prefs.mode(context))
+            putExtra(NightLogService.EXTRA_NOWAKELOCK, Prefs.noWake(context))
         }
         if (Build.VERSION.SDK_INT >= 26) {
             context.startForegroundService(svc)
