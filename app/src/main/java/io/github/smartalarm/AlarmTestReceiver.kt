@@ -13,6 +13,10 @@ import android.os.Looper
 
 class AlarmTestReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // Дедуп: дедлайн из сервиса и AlarmManager приходят почти одновременно,
+        // иначе вибрация запускалась дважды и в alarm_fired.txt было две записи.
+        if (!AlarmLogic.markFired()) return
+
         val now = System.currentTimeMillis()
         try {
             val dir = context.getExternalFilesDir(null) ?: context.filesDir
@@ -57,7 +61,7 @@ class AlarmTestReceiver : BroadcastReceiver() {
         )
 
         val n = Notification.Builder(context, CHANNEL_ID)
-            .setContentTitle("ТЕСТ БУДИЛЬНИКА")
+            .setContentTitle("БУДИЛЬНИК · ПОДЪЁМ")
             .setContentText("Нажмите СТОП, чтобы выключить")
             .setSmallIcon(R.drawable.ic_probe)
             .setCategory(Notification.CATEGORY_ALARM)
@@ -72,11 +76,13 @@ class AlarmTestReceiver : BroadcastReceiver() {
 
         Handler(Looper.getMainLooper()).postDelayed({
             if (AlarmPlayer.active) AlarmPlayer.stop(context)
-        }, 90_000L)
+        }, AUTO_STOP_MS)
     }
 
     companion object {
         private const val CHANNEL_ID = "alarmtest"
+        // 90 с было мало: если человек не успел дотянуться до часов, будильник замолкал.
+        private const val AUTO_STOP_MS = 300_000L
     }
 }
 
@@ -122,27 +128,36 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
             gravity = android.view.Gravity.CENTER
             setPadding(0, 4, 0, 16)
         }
+        val hint = android.widget.TextView(this).apply {
+            text = "удерживай кнопку, чтобы выключить"
+            setTextColor(android.graphics.Color.parseColor("#80CBC4"))
+            textSize = 11f
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 0, 0, 10)
+        }
         val stop = android.widget.Button(this).apply {
             text = "ОСТАНОВИТЬ"
             textSize = 18f
             isAllCaps = false
-            setOnClickListener { finishAlarm() }
+            // Раньше гасило любое касание и любая кнопка: можно было выключить,
+            // просто пошевелив рукой. Теперь — только удержание.
+            setOnLongClickListener {
+                finishAlarm()
+                true
+            }
         }
         root.addView(title)
         root.addView(time)
         root.addView(stop)
-        root.setOnClickListener { finishAlarm() }
+        root.addView(hint)
         setContentView(root)
 
-        Handler(Looper.getMainLooper()).postDelayed(autoStop, 90_000L)
+        Handler(Looper.getMainLooper()).postDelayed(autoStop, 300_000L)
     }
 
     override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
-        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
-            finishAlarm()
-            return true
-        }
-        return super.dispatchKeyEvent(event)
+        // Кнопки не гасят будильник, но и не должны уходить в систему.
+        return true
     }
 
     private fun finishAlarm() {

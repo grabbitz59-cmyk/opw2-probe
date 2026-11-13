@@ -32,6 +32,7 @@ class NightLogService : Service(), SensorEventListener {
     companion object {
         const val ACTION_START = "io.github.smartalarm.START"
         const val ACTION_STOP = "io.github.smartalarm.STOP"
+        const val ACTION_FLUSH = "io.github.smartalarm.FLUSH"
         const val EXTRA_MODE = "mode"
         const val EXTRA_NOWAKELOCK = "nowakelock"
         const val MODE_ECO = "eco"
@@ -40,6 +41,8 @@ class NightLogService : Service(), SensorEventListener {
         private const val CHANNEL_ID = "probe"
         private const val NOTIFICATION_ID = 42
         private const val BUCKET_MS = 30_000L
+        private const val HEARTBEAT_MS = 60_000L
+        private const val HEARTBEAT_REQUEST = 415
         private const val HR_ON_MS = 40_000L
         private const val HR_OFF_ECO_MS = 260_000L
         private const val HR_OFF_FULL_MS = 20_000L
@@ -136,6 +139,12 @@ class NightLogService : Service(), SensorEventListener {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Heartbeat: система разбудила приложение — сбрасываем бакет немедленно.
+        // Если сервис почему-то не был запущен, дальше пойдёт обычный старт сессии.
+        if (intent?.action == ACTION_FLUSH && isRunning) {
+            handler.post { writeBucket() }
+            return START_STICKY
+        }
         if (isRunning) return START_STICKY
 
         try {
@@ -169,6 +178,7 @@ class NightLogService : Service(), SensorEventListener {
             handler.post(bucket)
             handler.post(hrOn)
             AlarmLogic.restoreFromPrefs(this)
+            scheduleHeartbeat()
             Thread {
                 val r = HealthPassive.start(this)
                 writeRaw("# passive: " + r.replace("\n", " | "))
@@ -198,9 +208,49 @@ class NightLogService : Service(), SensorEventListener {
             batteryReceiverRegistered = false
         }
         finishSummary()
+        cancelHeartbeat()
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         super.onDestroy()
+    }
+
+    // ---------- heartbeat: страховка от suspend ----------
+
+    private fun heartbeatPi(): PendingIntent = PendingIntent.getBroadcast(
+        this, HEARTBEAT_REQUEST,
+        Intent(this, HeartbeatReceiver::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
+    /**
+     * Точный alarm каждые 60 с. Нужен потому, что при suspend SoC
+     * `Handler.postDelayed` (uptime) приходит с опозданием до минут,
+     * а покрытие ночи падало до 21%.
+     */
+    private fun scheduleHeartbeat() {
+        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val at = System.currentTimeMillis() + HEARTBEAT_MS
+        try {
+            if (Build.VERSION.SDK_INT >= 23) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, heartbeatPi())
+            } else {
+                am.setExact(AlarmManager.RTC_WAKEUP, at, heartbeatPi())
+            }
+        } catch (t: Throwable) {
+            try {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, heartbeatPi())
+            } catch (t2: Throwable) {
+                errorLog("heartbeat schedule failed", t2)
+            }
+        }
+    }
+
+    private fun cancelHeartbeat() {
+        try {
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.cancel(heartbeatPi())
+        } catch (_: Throwable) {
+        }
     }
 
     private fun createChannel() {
@@ -356,6 +406,7 @@ class NightLogService : Service(), SensorEventListener {
         writeRaw(line)
         AlarmLogic.onBucket(this, n, mv, std, p2p)
         startInForeground("${if (pct >= 0) "$pct%" else "?"} · HR $hb · acc $n")
+        scheduleHeartbeat()
     }
 
     private fun fmt(v: Double): String = String.format(java.util.Locale.US, "%.3f", v)

@@ -56,6 +56,21 @@ object AlarmLogic {
     private var tick = 0
     private var lastMotionTs = System.currentTimeMillis()
     private var lastTriggerReason = ""
+    private var firedAt = 0L
+
+    /**
+     * Атомарный дедуп срабатывания: и дедлайн из сервиса, и AlarmManager приходят
+     * примерно в один момент. Раньше это давало две вибрации и две записи в лог.
+     */
+    fun markFired(): Boolean = synchronized(lock) {
+        val now = System.currentTimeMillis()
+        if (now - firedAt < 60_000L) {
+            false
+        } else {
+            firedAt = now
+            true
+        }
+    }
 
     // ---------- снимки состояния для CSV и UI ----------
 
@@ -129,11 +144,20 @@ object AlarmLogic {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 
+    private fun showPi(ctx: Context): PendingIntent = PendingIntent.getActivity(
+        ctx, 78,
+        Intent(ctx, AlarmActivity::class.java).addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP,
+        ),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
     private fun scheduleFallback(ctx: Context, at: Long) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val pi = fallbackPi(ctx)
         try {
-            am.setAlarmClock(AlarmManager.AlarmClockInfo(at, pi), pi)
+            // showIntent — именно activity: иначе системный UI не показывает будильник
+            am.setAlarmClock(AlarmManager.AlarmClockInfo(at, showPi(ctx)), pi)
             log(ctx, "fallback setAlarmClock ok")
         } catch (t: Throwable) {
             log(ctx, "setAlarmClock failed: $t")
