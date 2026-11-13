@@ -101,7 +101,7 @@ class ProbeActivity : ComponentActivity() {
         btn("9b Будильник СЕЙЧАС") { testAlarmNow() }
         btn("P Тест PPG / вендорных сенсоров") {
             val sm = getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager
-            runReport("Ppg") { PpgTest.run(sm, 8000) }
+            runReport("Ppg") { PpgTest.run(sm) }
         }
         btn("10 Разрешения и статус") { append(permsReport()) }
 

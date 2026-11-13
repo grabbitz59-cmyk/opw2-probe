@@ -23,18 +23,33 @@ object PpgTest {
         val error: String?,
     )
 
-    fun run(sm: SensorManager, durationMs: Long = 8000): String {
-        val targets = sm.getSensorList(Sensor.TYPE_ALL).filter {
-            it.stringType.startsWith("com.google.wear.sensor") ||
-                it.type == Sensor.TYPE_HEART_RATE ||
-                it.type == Sensor.TYPE_ACCELEROMETER
+    private val KEY_TYPES = listOf(
+        "com.google.wear.sensor.ppg",
+        "com.google.wear.sensor.ppg_hrm",
+        "com.google.wear.sensor.ppg_spo",
+        "com.google.wear.sensor.PPG_RAW_IR0",
+        "com.google.wear.sensor.PPG_RAW_R0",
+        "com.google.wear.sensor.PPG_RAW_G0",
+        "com.google.wear.sensor.PPG_RAW_IR1",
+        "com.google.wear.sensor.w_temperature",
+        "com.google.wear.sensor.status",
+        "android.sensor.ecg",
+        "android.sensor.heart_rate",
+    )
+
+    fun run(sm: SensorManager, durationMs: Long = 6000): String {
+        val all = sm.getSensorList(Sensor.TYPE_ALL)
+        val targets = all.filter { s ->
+            s.stringType in KEY_TYPES || s.type == Sensor.TYPE_HEART_RATE
         }.sortedBy { it.stringType }
+        val accel = all.firstOrNull { it.type == Sensor.TYPE_ACCELEROMETER }
 
         val sb = StringBuilder()
-        sb.appendLine("PPG/вендорные сенсоры: ${targets.size}, тест по ${durationMs / 1000} с каждый")
+        sb.appendLine("Ключевые сенсоры: ${targets.size + if (accel != null) 1 else 0}, тест по ${durationMs / 1000} с каждый")
         sb.appendLine()
 
-        for (s in targets) {
+        val ordered = targets + listOfNotNull(accel)
+        for (s in ordered) {
             val r = try {
                 probe(sm, s, durationMs)
             } catch (t: Throwable) {
