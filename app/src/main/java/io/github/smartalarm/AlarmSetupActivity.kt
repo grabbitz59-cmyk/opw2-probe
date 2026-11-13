@@ -83,6 +83,7 @@ class AlarmSetupActivity : ComponentActivity() {
         wide(root, "СОХРАНИТЬ И СПАТЬ") { saveAndSleep() }
         wide(root, "Отмена") { finish() }
 
+
         scroll.addView(root)
         setContentView(scroll)
     }
@@ -160,17 +161,19 @@ class AlarmSetupActivity : ComponentActivity() {
         setOnClickListener { onClick() }
     }
 
-    private fun wide(parent: LinearLayout, label: String, onClick: () -> Unit) {
-        parent.addView(Button(this).apply {
+    private fun wide(parent: LinearLayout, label: String, onClick: () -> Unit): Button {
+        val b = Button(this).apply {
             text = label
             textSize = 11f
             isAllCaps = false
             minimumHeight = 0
             minHeight = 0
             setOnClickListener { onClick() }
-        }, LinearLayout.LayoutParams(
+        }
+        parent.addView(b, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(44)
         ).apply { bottomMargin = dp(6) })
+        return b
     }
 
     private fun lp() = LinearLayout.LayoutParams(
