@@ -1,55 +1,133 @@
 package io.github.smartalarm
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.os.PowerManager
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
-import java.io.File
+import android.os.Handler
+import android.os.Looper
 
 class AlarmTestReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val now = System.currentTimeMillis()
         try {
             val dir = context.getExternalFilesDir(null) ?: context.filesDir
-            File(dir, "alarm_fired.txt").appendText("fired=$now\n")
+            java.io.File(dir, "alarm_fired.txt").appendText("fired=$now\n")
         } catch (_: Throwable) {
         }
 
-        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "opw2probe:alarm")
-        wl.acquire(60_000L)
+        AlarmPlayer.start(context)
 
-        try {
-            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            val ch = NotificationChannel("alarmtest", "Alarm test", NotificationManager.IMPORTANCE_HIGH)
-            nm.createNotificationChannel(ch)
-            val n: Notification = Notification.Builder(context, "alarmtest")
-                .setContentTitle("ТЕСТ БУДИЛЬНИКА")
-                .setContentText("Сработал в ${java.time.Instant.ofEpochMilli(now)}")
-                .setSmallIcon(R.drawable.ic_probe)
-                .setAutoCancel(true)
-                .build()
-            nm.notify(777, n)
-        } catch (_: Throwable) {
-        }
-
-        try {
-            val vibrator = if (Build.VERSION.SDK_INT >= 31) {
-                (context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
-            } else {
-                @Suppress("DEPRECATION")
-                context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_ID, "Будильник", NotificationManager.IMPORTANCE_HIGH).apply {
+                setShowBadge(false)
+                enableVibration(false)
             }
-            val pattern = longArrayOf(0, 700, 300, 700, 300, 700, 300, 700, 300, 1200)
-            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
-        } catch (_: Throwable) {
+        )
+
+        val full = PendingIntent.getActivity(
+            context, 91,
+            Intent(context, AlarmActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val stop = PendingIntent.getBroadcast(
+            context, 92,
+            Intent(context, StopAlarmReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val n = Notification.Builder(context, CHANNEL_ID)
+            .setContentTitle("ТЕСТ БУДИЛЬНИКА")
+            .setContentText("Нажмите СТОП, чтобы выключить")
+            .setSmallIcon(R.drawable.ic_probe)
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setContentIntent(full)
+            .setFullScreenIntent(full, true)
+            .addAction(Notification.Action.Builder(null, "СТОП", stop).build())
+            .build()
+        nm.notify(AlarmPlayer.ALARM_NOTIFICATION_ID, n)
+
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (AlarmPlayer.active) AlarmPlayer.stop(context)
+        }, 90_000L)
+    }
+
+    companion object {
+        private const val CHANNEL_ID = "alarmtest"
+    }
+}
+
+class StopAlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        AlarmPlayer.stop(context)
+    }
+}
+
+class AlarmActivity : androidx.activity.ComponentActivity() {
+    private val autoStop = Runnable { finishAlarm() }
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            )
         }
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        val root = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setBackgroundColor(android.graphics.Color.BLACK)
+            setPadding(24, 24, 24, 24)
+        }
+        val title = android.widget.TextView(this).apply {
+            text = "ПОДЪЁМ"
+            setTextColor(android.graphics.Color.WHITE)
+            textSize = 22f
+            gravity = android.view.Gravity.CENTER
+        }
+        val time = android.widget.TextView(this).apply {
+            text = java.time.LocalTime.now().withNano(0).toString()
+            setTextColor(android.graphics.Color.GRAY)
+            textSize = 14f
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, 4, 0, 16)
+        }
+        val stop = android.widget.Button(this).apply {
+            text = "ОСТАНОВИТЬ"
+            textSize = 18f
+            isAllCaps = false
+            setOnClickListener { finishAlarm() }
+        }
+        root.addView(title)
+        root.addView(time)
+        root.addView(stop)
+        setContentView(root)
+
+        Handler(Looper.getMainLooper()).postDelayed(autoStop, 90_000L)
+    }
+
+    private fun finishAlarm() {
+        AlarmPlayer.stop(this)
+        finish()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
     }
 }
