@@ -89,6 +89,13 @@ object HealthLog {
     }
 }
 
+private fun prop(obj: Any, suffix: String): Any? =
+    try {
+        obj.javaClass.methods.firstOrNull { it.name == "get$suffix" && it.parameterCount == 0 }?.invoke(obj)
+    } catch (t: Throwable) {
+        "ERR:$t"
+    }
+
 object HealthPassive {
 
     fun start(ctx: Context): String {
@@ -104,9 +111,9 @@ object HealthPassive {
             HealthLog.raw(ctx, "${Instant.now()},${System.currentTimeMillis()},event,,passive_started")
             buildString {
                 appendLine("PassiveMonitoring стартовал")
-                appendLine("dataTypes=${caps.supportedDataTypesPassiveMonitoring.map { it.name }}")
-                appendLine("goals=${caps.supportedDataTypesPassiveGoals.map { it.name }}")
-                appendLine("activityStates=${caps.supportedUserActivityStates.map { it.name }}")
+                appendLine("dataTypes=${prop(caps, "SupportedDataTypesPassiveMonitoring")}")
+                appendLine("goals=${prop(caps, "SupportedDataTypesPassiveGoals")}")
+                appendLine("activityStates=${prop(caps, "SupportedUserActivityStates")}")
             }
         } catch (t: Throwable) {
             HealthLog.raw(ctx, "${Instant.now()},${System.currentTimeMillis()},error,,start $t")
