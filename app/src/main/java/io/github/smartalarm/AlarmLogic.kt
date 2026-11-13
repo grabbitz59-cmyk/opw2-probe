@@ -6,8 +6,32 @@ import android.content.Context
 import android.content.Intent
 import java.io.File
 import java.time.Instant
+import java.util.Calendar
+import java.util.Locale
 
+/**
+ * Логика «умного» будильника.
+ *
+ * P0-правки относительно 1.8:
+ *  - HR берётся из HealthState, куда теперь пишет и собственный сенсор (source=sensor),
+ *    а не только passive Health Services;
+ *  - baseline считается по медиане УНИКАЛЬНЫХ значений за 45 мин (дубли больше не занижают базу);
+ *  - порог подъёма HR поднят до 8 bpm (3 bpm — внутри шума оптического датчика);
+ *  - «движение» определяется с гистерезисом и требует реальных порогов, а не OR по шуму;
+ *  - onArousalSignal больше не требует обязательного sawAsleep: достаточно 20 минут тишины.
+ */
 object AlarmLogic {
+
+    private const val HR_MAX_AGE_MS = 300_000L            // насколько старый HR ещё считается свежим
+    private const val BASELINE_WINDOW_MS = 45 * 60_000L   // окно для baseline
+    private const val BASELINE_MIN_SAMPLES = 8            // минимум уникальных значений
+    private const val HR_RISE_BPM = 8.0f                  // подъём пульса, значимый для arousal
+    private const val QUIET_FOR_ASLEEP_MS = 20 * 60_000L  // тишина, после которой считаем «уснул»
+    private const val MOTION_HOLD_MS = 90_000L            // движение «свежее» в течение 90 с
+
+    private const val MOTION_MOVES = 15                   // «рывков» в бакете
+    private const val MOTION_STD = 0.30                   // std магнитуды, м/с²
+    private const val MOTION_P2P = 3.0                    // peak-to-peak, м/с²
 
     @Volatile
     var targetAt: Long = 0
@@ -21,20 +45,55 @@ object AlarmLogic {
     var triggered: Boolean = false
         private set
 
-    private val hrSamples = ArrayList<Pair<Long, Float>>()
     private val lock = Any()
+    private val hrSamples = ArrayList<Pair<Long, Float>>()
+    private var lastHrValue = -1f
+    private var lastHrAt = 0L
     private var sawAsleep = false
     private var tick = 0
-    private var lastMotionTs = 0L
+    private var lastMotionTs = System.currentTimeMillis()
+    private var lastTriggerReason = ""
+
+    // ---------- снимки состояния для CSV и UI ----------
+
+    fun sawAsleepNow(): Boolean = synchronized(lock) { sawAsleep }
+
+    fun tickCount(): Int = synchronized(lock) { tick }
+
+    fun quietMinutesNow(): Long =
+        synchronized(lock) { (System.currentTimeMillis() - lastMotionTs) / 60_000L }
+
+    fun lastTriggerReason(): String = synchronized(lock) { lastTriggerReason }
+
+    /** idle | armed | triggered — компактно пишется в CSV */
+    fun stateLabel(): String = when {
+        triggered -> "triggered"
+        targetAt > 0 -> "armed"
+        else -> "idle"
+    }
+
+    fun targetClock(): String {
+        val at = targetAt
+        if (at <= 0) return "--:--"
+        val c = Calendar.getInstance().apply { timeInMillis = at }
+        return String.format(Locale.US, "%02d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE))
+    }
+
+    // ---------- взвод / снятие ----------
 
     fun arm(ctx: Context, targetAtMs: Long, windowMin: Int) {
-        targetAt = targetAtMs
-        windowMs = windowMin * 60_000L
-        triggered = false
-        synchronized(lock) { hrSamples.clear() }
-        sawAsleep = false
-        tick = 0
-        lastMotionTs = System.currentTimeMillis()
+        synchronized(lock) {
+            targetAt = targetAtMs
+            windowMs = windowMin * 60_000L
+            triggered = false
+            hrSamples.clear()
+            lastHrValue = -1f
+            lastHrAt = 0L
+            sawAsleep = false
+            tick = 0
+            lastMotionTs = System.currentTimeMillis()
+            lastTriggerReason = ""
+        }
         Prefs.setAlarmAt(ctx, targetAtMs)
         Prefs.setWindowMin(ctx, windowMin)
         scheduleFallback(ctx, targetAtMs)
@@ -42,8 +101,11 @@ object AlarmLogic {
     }
 
     fun disarm(ctx: Context) {
-        targetAt = 0
-        triggered = false
+        synchronized(lock) {
+            targetAt = 0
+            triggered = false
+            lastTriggerReason = ""
+        }
         Prefs.setAlarmAt(ctx, 0)
         cancelFallback(ctx)
         log(ctx, "disarm")
@@ -56,13 +118,17 @@ object AlarmLogic {
         }
     }
 
+    // ---------- fallback через AlarmManager ----------
+
+    private fun fallbackPi(ctx: Context): PendingIntent = PendingIntent.getBroadcast(
+        ctx, 77,
+        Intent(ctx, AlarmTestReceiver::class.java),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+    )
+
     private fun scheduleFallback(ctx: Context, at: Long) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pi = PendingIntent.getBroadcast(
-            ctx, 77,
-            Intent(ctx, AlarmTestReceiver::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
+        val pi = fallbackPi(ctx)
         try {
             am.setAlarmClock(AlarmManager.AlarmClockInfo(at, pi), pi)
             log(ctx, "fallback setAlarmClock ok")
@@ -79,21 +145,19 @@ object AlarmLogic {
 
     private fun cancelFallback(ctx: Context) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pi = PendingIntent.getBroadcast(
-            ctx, 77,
-            Intent(ctx, AlarmTestReceiver::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        am.cancel(pi)
+        am.cancel(fallbackPi(ctx))
     }
+
+    // ---------- основной цикл: один бакет сенсоров ----------
 
     fun onBucket(ctx: Context, moves: Int, std: Double, p2p: Double) {
         val now = System.currentTimeMillis()
-        HealthState.freshHr()?.let { hr ->
-            synchronized(lock) {
-                hrSamples.add(now to hr)
-                hrSamples.removeAll { now - it.first > 45 * 60_000L }
-            }
+
+        val fresh = HealthState.freshHr(HR_MAX_AGE_MS)
+        if (fresh != null) addSample(now, fresh)
+
+        if (isMotion(moves, std, p2p)) {
+            synchronized(lock) { lastMotionTs = now }
         }
 
         if (targetAt <= 0 || triggered) return
@@ -103,67 +167,108 @@ object AlarmLogic {
         }
         if (now < targetAt - windowMs) return
 
-        val base = baseline()
-        val hr = HealthState.freshHr()
-        val motion = moves >= 6 || std > 0.10 || p2p > 1.2
-        if (motion) lastMotionTs = now
-        if (!sawAsleep) {
-            val inferred = inferAsleep(now)
-            if (inferred) {
-                sawAsleep = true
-                log(ctx, "inferred asleep (quiet ${(now - lastMotionTs) / 60000}m)")
-            }
-        }
-        val hrRise = hr != null && base != null && (hr - base) >= 3.0f
-        val state = HealthState.freshestate(20 * 60_000L)
-        val awake = sawAsleep && state != null && state != "USER_ACTIVITY_ASLEEP"
+        val base = baseline(now)
+        val hr = fresh
+        val hrRise = hr != null && base != null && (hr - base) >= HR_RISE_BPM
+        val asleepSeen = ensureAsleep(ctx, now)
 
-        tick++
-        if (tick % 10 == 0) {
-            log(ctx, "tick hr=$hr base=$base moves=$moves std=$std state=$state asleep_seen=$sawAsleep")
+        val sysState = HealthState.freshestate(20 * 60_000L)
+        val sysAwake = asleepSeen && sysState != null && sysState != "USER_ACTIVITY_ASLEEP"
+
+        val t = synchronized(lock) { tick++ }
+        if (t % 10 == 0) {
+            log(
+                ctx,
+                "tick hr=$hr base=$base rise=$hrRise moves=$moves std=${fmt(std)} " +
+                    "p2p=${fmt(p2p)} quiet=${quietMinutesNow()}m state=$sysState " +
+                    "asleep_seen=$asleepSeen src=${HealthState.sourceNow()}",
+            )
         }
 
-        if (motion && (hrRise || awake)) {
-            trigger(ctx, "smart moves=$moves std=$std hr=$hr base=$base state=$state")
+        val motionFresh = synchronized(lock) { now - lastMotionTs < MOTION_HOLD_MS }
+        if (motionFresh && (hrRise || sysAwake)) {
+            trigger(
+                ctx,
+                "smart hr=$hr base=$base rise=$hrRise awake=$sysAwake " +
+                    "moves=$moves std=${fmt(std)} src=${HealthState.sourceNow()}",
+            )
         }
+    }
+
+    private fun isMotion(moves: Int, std: Double, p2p: Double): Boolean =
+        moves >= MOTION_MOVES || std > MOTION_STD || p2p > MOTION_P2P
+
+    /** Возвращает true, если сон уже подтверждён. */
+    private fun ensureAsleep(ctx: Context, now: Long): Boolean {
+        if (synchronized(lock) { sawAsleep }) return true
+        val quiet = quietMinutesNow()
+        if (quiet < QUIET_FOR_ASLEEP_MS / 60_000L) return false
+        val uniq = synchronized(lock) {
+            hrSamples.filter { now - it.first <= BASELINE_WINDOW_MS }.map { it.second }
+        }
+        if (uniq.size < BASELINE_MIN_SAMPLES) return false
+        synchronized(lock) { sawAsleep = true }
+        log(ctx, "inferred asleep (quiet ${quiet}m, hr samples ${uniq.size})")
+        return true
     }
 
     fun onAsleep(ctx: Context) {
-        if (!sawAsleep) {
-            sawAsleep = true
-            log(ctx, "asleep detected")
+        val first = synchronized(lock) {
+            if (sawAsleep) false else { sawAsleep = true; true }
         }
+        if (first) log(ctx, "asleep detected (health services)")
     }
 
+    /**
+     * Сигнал от Health Services о смене активности.
+     * Раньше здесь стоял жёсткий `if (!sawAsleep) return`, из-за чего сигнал
+     * AWAKE игнорировался, если косвенный детект сна не сработал.
+     */
     fun onArousalSignal(ctx: Context, why: String) {
-        if (!sawAsleep) return
         if (targetAt <= 0 || triggered) return
         val now = System.currentTimeMillis()
         if (now < targetAt - windowMs || now >= targetAt) return
+
+        val asleepSeen = synchronized(lock) { sawAsleep }
+        val quiet = quietMinutesNow()
+        if (!asleepSeen && quiet < QUIET_FOR_ASLEEP_MS / 60_000L) {
+            log(ctx, "arousal ignored (no sleep evidence, quiet=${quiet}m): $why")
+            return
+        }
         trigger(ctx, "state $why")
     }
 
-    private fun inferAsleep(now: Long): Boolean {
-        if (now - lastMotionTs < 15 * 60_000L) return false
-        val recent = synchronized(lock) {
-            hrSamples.filter { now - it.first < 20 * 60_000L }.map { it.second }
+    // ---------- HR-база ----------
+
+    private fun addSample(now: Long, hr: Float) {
+        synchronized(lock) {
+            // дубликаты одного и того же passive-значения не должны надувать выборку
+            if (hr == lastHrValue && now - lastHrAt < 60_000L) return
+            lastHrValue = hr
+            lastHrAt = now
+            hrSamples.add(now to hr)
+            hrSamples.removeAll { now - it.first > BASELINE_WINDOW_MS }
         }
-        if (recent.size < 15) return false
-        val mean = recent.average()
-        val sd = kotlin.math.sqrt(recent.map { (it - mean) * (it - mean) }.average())
-        return sd < 3.5
     }
 
-    private fun baseline(): Float? {
-        val vals = synchronized(lock) { hrSamples.map { it.second } }
-        if (vals.size < 8) return null
-        val sorted = vals.sorted()
-        val idx = (sorted.size * 0.2).toInt().coerceIn(0, sorted.size - 1)
-        return sorted[idx]
+    /** Медиана уникальных значений за окно — устойчива к дублям и выбросам. */
+    private fun baseline(now: Long): Float? {
+        val vals = synchronized(lock) {
+            hrSamples.filter { now - it.first <= BASELINE_WINDOW_MS }.map { it.second }
+        }
+        if (vals.size < BASELINE_MIN_SAMPLES) return null
+        val s = vals.sorted()
+        val mid = s.size / 2
+        return if (s.size % 2 == 1) s[mid] else (s[mid - 1] + s[mid]) / 2f
     }
+
+    // ---------- срабатывание ----------
 
     private fun trigger(ctx: Context, reason: String) {
-        triggered = true
+        val go = synchronized(lock) {
+            if (triggered) false else { triggered = true; lastTriggerReason = reason; true }
+        }
+        if (!go) return
         log(ctx, "TRIGGER $reason")
         try {
             ctx.sendBroadcast(Intent(ctx, AlarmTestReceiver::class.java))
@@ -180,4 +285,6 @@ object AlarmLogic {
         } catch (_: Throwable) {
         }
     }
+
+    private fun fmt(v: Double): String = String.format(Locale.US, "%.2f", v)
 }

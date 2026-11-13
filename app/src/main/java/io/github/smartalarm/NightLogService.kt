@@ -45,7 +45,7 @@ class NightLogService : Service(), SensorEventListener {
         private const val HR_OFF_FULL_MS = 20_000L
         private const val GRAVITY = 9.80665
         private const val CSV_HEADER =
-            "ts,epoch_ms,mode,battery_pct,charging,batt_temp_c,screen_on,doze,hr_bpm,hr_age_s,acc_n,acc_mean,acc_std,acc_p2p,moves,hr_samples,uptime_s"
+            "ts,epoch_ms,mode,battery_pct,charging,batt_temp_c,screen_on,doze,hr_bpm,hr_age_s,acc_n,acc_mean,acc_std,acc_p2p,moves,hr_samples,uptime_s,hr_source,saw_asleep,alarm_state"
 
         @Volatile var isRunning = false
         @Volatile var currentPath: String = ""
@@ -340,10 +340,15 @@ class NightLogService : Service(), SensorEventListener {
         }
 
         val iso = Instant.ofEpochMilli(now).toString()
+        // P0: диагностируемость ночи — откуда HR, подтверждён ли сон, состояние будильника
+        val hrSrc = HealthState.sourceNow()
+        val sawAsleep = AlarmLogic.sawAsleepNow()
+        val alarmState = AlarmLogic.stateLabel()
         val line = listOf(
             iso, now, mode, pct, charging, tempC, screenOn, doze,
             hb, hAge, n, fmt(mean), fmt(std), fmt(p2p), mv, hrs,
             SystemClock.elapsedRealtime() / 1000,
+            hrSrc, sawAsleep, alarmState,
         ).joinToString(",")
         writeRaw(line)
         AlarmLogic.onBucket(this, mv, std, p2p)
@@ -394,11 +399,17 @@ class NightLogService : Service(), SensorEventListener {
             }
             Sensor.TYPE_HEART_RATE -> {
                 val v = event.values.firstOrNull() ?: return
+                if (v <= 0f) return
+                val ts = System.currentTimeMillis()
                 synchronized(lock) {
                     hrBpm = v.toInt()
-                    hrAt = System.currentTimeMillis()
+                    hrAt = ts
                     hrSamples++
                 }
+                // P0: свой сенсор теперь тоже питает HealthState.
+                // Раньше запись была только локальной, а AlarmLogic читал HealthState,
+                // который заполнялся лишь passive-путём Health Services (на OPW2 он молчит).
+                HealthState.updateHr(v, ts, "SENSOR", "sensor")
             }
         }
     }
