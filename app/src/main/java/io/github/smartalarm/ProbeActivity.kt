@@ -194,6 +194,7 @@ class ProbeActivity : ComponentActivity() {
         val need = mutableListOf<String>()
         val wanted = buildList {
             add(Manifest.permission.BODY_SENSORS)
+            add(Manifest.permission.ACTIVITY_RECOGNITION)
             add(Manifest.permission.POST_NOTIFICATIONS)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.BODY_SENSORS_BACKGROUND)
         }
@@ -227,6 +228,7 @@ class ProbeActivity : ComponentActivity() {
         val wanted = listOf(
             Manifest.permission.BODY_SENSORS,
             Manifest.permission.BODY_SENSORS_BACKGROUND,
+            Manifest.permission.ACTIVITY_RECOGNITION,
             Manifest.permission.POST_NOTIFICATIONS,
             Manifest.permission.WAKE_LOCK,
             Manifest.permission.VIBRATE,
@@ -261,7 +263,11 @@ class ProbeActivity : ComponentActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED) {
             append("Нет BODY_SENSORS — запрашиваю")
             permLauncher.launch(
-                arrayOf(Manifest.permission.BODY_SENSORS, Manifest.permission.POST_NOTIFICATIONS)
+                arrayOf(
+                Manifest.permission.BODY_SENSORS,
+                Manifest.permission.ACTIVITY_RECOGNITION,
+                Manifest.permission.POST_NOTIFICATIONS,
+            )
             )
             return
         }

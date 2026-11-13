@@ -150,6 +150,7 @@ def main():
         "android.permission.BODY_SENSORS",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.BODY_SENSORS_BACKGROUND",
+        "android.permission.ACTIVITY_RECOGNITION",
         "android.permission.VIBRATE",
     ):
         rc, out = adb("-s", serial, "shell", "pm", "grant", PKG, perm, timeout=30)
