@@ -43,6 +43,11 @@ jobs:
           KEY_ALIAS: probe
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      - name: PPG pipeline selftest
+        run: |
+          python3 -m pip install --quiet numpy
+          python3 tools/ppg_hr.py --selftest
+
       - name: Collect APK
         run: |
           mkdir -p out
