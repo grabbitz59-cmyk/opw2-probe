@@ -137,8 +137,8 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
         Handler(Looper.getMainLooper()).postDelayed(autoStop, 90_000L)
     }
 
-    override fun dispatchKeyEvent(event: android.view.KeyEvent?): Boolean {
-        if (event != null && event.action == android.view.KeyEvent.ACTION_DOWN) {
+    override fun dispatchKeyEvent(event: android.view.KeyEvent): Boolean {
+        if (event.action == android.view.KeyEvent.ACTION_DOWN) {
             finishAlarm()
             return true
         }
