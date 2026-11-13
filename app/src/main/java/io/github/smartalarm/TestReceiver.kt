@@ -29,9 +29,13 @@ class TestReceiver : BroadcastReceiver() {
             ACTION_START_ECO_NW -> startLog(app, NightLogService.MODE_ECO, true)
             ACTION_START_FULL -> startLog(app, NightLogService.MODE_FULL, false)
             ACTION_STOP_LOG -> {
-                app.startService(
-                    Intent(app, NightLogService::class.java).setAction(NightLogService.ACTION_STOP)
-                )
+                try {
+                    app.startService(
+                        Intent(app, NightLogService::class.java).setAction(NightLogService.ACTION_STOP)
+                    )
+                } catch (t: Throwable) {
+                    UiLog.add("stop: $t")
+                }
             }
             ACTION_STOP_ALARM -> AlarmPlayer.stop(app)
             ACTION_RUN_PASSIVE -> {
@@ -61,12 +65,16 @@ class TestReceiver : BroadcastReceiver() {
     }
 
     private fun startLog(ctx: Context, mode: String, noWake: Boolean) {
-        val svc = Intent(ctx, NightLogService::class.java).apply {
-            action = NightLogService.ACTION_START
-            putExtra(NightLogService.EXTRA_MODE, mode)
-            putExtra(NightLogService.EXTRA_NOWAKELOCK, noWake)
+        try {
+            val svc = Intent(ctx, NightLogService::class.java).apply {
+                action = NightLogService.ACTION_START
+                putExtra(NightLogService.EXTRA_MODE, mode)
+                putExtra(NightLogService.EXTRA_NOWAKELOCK, noWake)
+            }
+            if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(svc) else ctx.startService(svc)
+        } catch (t: Throwable) {
+            UiLog.add("FGS из фона запрещён: $t")
         }
-        if (android.os.Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(svc) else ctx.startService(svc)
     }
 
     private fun run(ctx: Context, dir: File, name: String, block: () -> String) {

@@ -47,6 +47,7 @@ class ProbeActivity : ComponentActivity() {
         buildUi()
         requestBasePermissions()
         append("Готов. Начните с кнопки «Разрешения».")
+        handleAutoIntent(intent)
     }
 
     override fun onResume() {
@@ -57,6 +58,24 @@ class ProbeActivity : ComponentActivity() {
         }
         updateStatus()
         refreshPreview()
+    }
+
+    private fun handleAutoIntent(i: Intent?) {
+        if (i == null) return
+        when (i.getStringExtra("autostart")) {
+            "eco" -> {
+                append("AUTO: старт eco")
+                startLog(NightLogService.MODE_ECO, i.getBooleanExtra("nowake", false))
+            }
+            "full" -> {
+                append("AUTO: старт full")
+                startLog(NightLogService.MODE_FULL, i.getBooleanExtra("nowake", false))
+            }
+        }
+        if (i.getBooleanExtra("autostop", false)) {
+            append("AUTO: стоп лога")
+            stopLog()
+        }
     }
 
     private fun buildUi() {
