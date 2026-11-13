@@ -45,7 +45,7 @@ class NightLogService : Service(), SensorEventListener {
         private const val HR_OFF_FULL_MS = 20_000L
         private const val GRAVITY = 9.80665
         private const val CSV_HEADER =
-            "ts,epoch_ms,mode,battery_pct,charging,batt_temp_c,screen_on,doze,hr_bpm,hr_age_s,acc_n,acc_mean,acc_std,acc_p2p,moves,hr_samples,uptime_s"
+            "ts,epoch_ms,mode,battery_pct,charging,batt_temp_c,screen_on,doze,hr_bpm,hr_age_s,acc_n,acc_mean,acc_std,acc_p2p,moves,hr_samples,uptime_s,hr_source,saw_asleep,alarm_state"
 
         @Volatile var isRunning = false
         @Volatile var currentPath: String = ""
@@ -321,8 +321,6 @@ class NightLogService : Service(), SensorEventListener {
         val std: Double
         val p2p: Double
         val mv: Int
-        val hb: Int
-        val hAge: Long
         val hrs: Int
         synchronized(lock) {
             n = accN
@@ -331,22 +329,32 @@ class NightLogService : Service(), SensorEventListener {
             std = if (var0 > 0) sqrt(var0) else 0.0
             p2p = if (n > 0) accMax - accMin else 0.0
             mv = moves
-            hb = hrBpm
-            hAge = if (hrAt > 0) (now - hrAt) / 1000 else -1
             hrs = hrSamples
             accN = 0; accSum = 0.0; accSumSq = 0.0
             accMin = Double.MAX_VALUE; accMax = -Double.MAX_VALUE
             moves = 0; hrSamples = 0
         }
 
+        // P0: в CSV пишем ЕДИНЫЙ HR (свой сенсор ИЛИ passive Health Services).
+        // Раньше здесь был только свой сенсор, который на OPW2 отдаёт 0,
+        // и колонка выглядела мёртвой даже когда passive HR реально шёл.
+        val hsHr = HealthState.freshHr()
+        val hb = hsHr?.toInt() ?: -1
+        val hAge = if (hsHr != null) (now - HealthState.hrTs) / 1000 else -1
+
         val iso = Instant.ofEpochMilli(now).toString()
+        // P0: диагностируемость ночи — откуда HR, подтверждён ли сон, состояние будильника
+        val hrSrc = HealthState.sourceNow()
+        val sawAsleep = AlarmLogic.sawAsleepNow()
+        val alarmState = AlarmLogic.stateLabel()
         val line = listOf(
             iso, now, mode, pct, charging, tempC, screenOn, doze,
             hb, hAge, n, fmt(mean), fmt(std), fmt(p2p), mv, hrs,
             SystemClock.elapsedRealtime() / 1000,
+            hrSrc, sawAsleep, alarmState,
         ).joinToString(",")
         writeRaw(line)
-        AlarmLogic.onBucket(this, mv, std, p2p)
+        AlarmLogic.onBucket(this, n, mv, std, p2p)
         startInForeground("${if (pct >= 0) "$pct%" else "?"} · HR $hb · acc $n")
     }
 
@@ -394,11 +402,17 @@ class NightLogService : Service(), SensorEventListener {
             }
             Sensor.TYPE_HEART_RATE -> {
                 val v = event.values.firstOrNull() ?: return
+                if (v <= 0f) return
+                val ts = System.currentTimeMillis()
                 synchronized(lock) {
                     hrBpm = v.toInt()
-                    hrAt = System.currentTimeMillis()
+                    hrAt = ts
                     hrSamples++
                 }
+                // P0: свой сенсор теперь тоже питает HealthState.
+                // Раньше запись была только локальной, а AlarmLogic читал HealthState,
+                // который заполнялся лишь passive-путём Health Services (на OPW2 он молчит).
+                HealthState.updateHr(v, ts, "SENSOR", "sensor")
             }
         }
     }

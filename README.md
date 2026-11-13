@@ -19,9 +19,30 @@
 CSV на бакет 30 с: батарея, зарядка, температура батареи, экран, doze, пульс и его возраст,
 `n/mean/std/p2p` магнитуды акселерометра, число «рывков», число сэмплов пульса, uptime.
 
+С версии `1.9-p0` в CSV добавлены три колонки для диагностики ночи:
+
+| колонка | смысл |
+|---|---|
+| `hr_source` | `sensor` — свой `TYPE_HEART_RATE`, `passive` — Health Services, `none` — данных нет |
+| `saw_asleep` | подтверждён ли сон (косвенно, по тишине + стабильному HR) |
+| `alarm_state` | `idle` / `armed` / `triggered` |
+
 Файлы пишутся в `getExternalFilesDir(null)`:
 `/sdcard/Android/data/io.github.smartalarm/files/probe_<mode>_<ts>.csv` + `summary.txt` +
 `report_*.txt`.
+
+## Проверка ночи
+
+`tools/night_report.py` считает, годится ли ночь для анализа, и возвращает код 1, если нет:
+
+```bash
+python tools/night_report.py --latest /sdcard/Android/data/io.github.smartalarm/files
+python tools/night_report.py probe_eco_*.csv --min-coverage 95 --min-hr 90
+```
+
+Пороговое условие: покрытие ≥95% (строки против ожидаемых 30-секундных бакетов) и ≥90% окон
+со свежим пульсом (`hr_samples>0` и `hr_age_s<=300`). Отдельно печатаются провалы >90 с, доля
+подтверждённого сна, состояние будильника и расход батареи на участках без зарядки.
 
 ## Сборка
 

@@ -33,18 +33,31 @@ object HealthState {
         private set
     @Volatile var hrAccuracy: String = ""
         private set
+    /** sensor | passive | none — откуда пришло последнее валидное значение */
+    @Volatile var hrSource: String = "none"
+        private set
     @Volatile var state: String = "?"
         private set
     @Volatile var stateTs: Long = 0
         private set
 
-    fun updateHr(v: Float, ts: Long, acc: String) {
+    /**
+     * @param source "sensor" — собственный TYPE_HEART_RATE, "passive" — Health Services.
+     * Раньше сюда писал только passive-путь, из-за чего AlarmLogic видел hr=null,
+     * пока passive monitoring молчал.
+     */
+    fun updateHr(v: Float, ts: Long, acc: String, source: String = "passive") {
         if (v > 0f) {
             hr = v
             hrTs = ts
             hrAccuracy = acc
+            hrSource = source
         }
     }
+
+    /** Возвращает источник свежего HR или "none", если данных нет. */
+    fun sourceNow(maxAgeMs: Long = 300_000L): String =
+        if (hr > 0f && System.currentTimeMillis() - hrTs < maxAgeMs) hrSource else "none"
 
     fun updateState(s: String, ts: Long) {
         state = s
