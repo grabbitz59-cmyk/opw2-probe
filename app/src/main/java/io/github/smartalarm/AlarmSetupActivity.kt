@@ -39,36 +39,47 @@ class AlarmSetupActivity : ComponentActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(28), dp(16), dp(28), dp(34))
+            setPadding(dp(22), dp(10), dp(22), dp(26))
         }
 
-        root.addView(TextView(this).apply {
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleRow.addView(TextView(this).apply {
             text = "БУДИЛЬНИК"
             setTextColor(Color.parseColor("#80CBC4"))
-            textSize = 10f
+            textSize = 9f
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(4))
-        }, lp())
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        titleRow.addView(Button(this).apply {
+            text = "✕"
+            textSize = 11f
+            isAllCaps = false
+            minimumHeight = 0
+            minHeight = 0
+            setPadding(0, 0, 0, 0)
+            setOnClickListener { finish() }
+        }, LinearLayout.LayoutParams(dp(34), dp(26)))
+        root.addView(titleRow, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
 
         timeView = TextView(this).apply {
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            textSize = 40f
+            textSize = 30f
             gravity = Gravity.CENTER
         }
         root.addView(timeView, lp())
 
         hintView = TextView(this).apply {
             setTextColor(Color.LTGRAY)
-            textSize = 9f
+            textSize = 8f
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(8))
+            setPadding(0, 0, 0, dp(2))
         }
         root.addView(hintView, lp())
-
-        row(root, "−1ч" to { shift(-60) }, "+1ч" to { shift(60) })
-        row(root, "−5м" to { shift(-5) }, "+5м" to { shift(5) })
-        row(root, "−1м" to { shift(-1) }, "+1м" to { shift(1) })
 
         windowBtn = wide(root, "") {
             windowMin = when (windowMin) {
@@ -80,8 +91,10 @@ class AlarmSetupActivity : ComponentActivity() {
             refresh()
         }
 
+        row(root, "−1ч" to { shift(-60) }, "+1ч" to { shift(60) })
+        row(root, "−5м" to { shift(-5) }, "+5м" to { shift(5) })
+
         wide(root, "СОХРАНИТЬ И СПАТЬ") { saveAndSleep() }
-        wide(root, "Отмена") { finish() }
 
 
         scroll.addView(root)
@@ -104,10 +117,8 @@ class AlarmSetupActivity : ComponentActivity() {
         val tomorrow = cal.get(Calendar.DAY_OF_YEAR) != now.get(Calendar.DAY_OF_YEAR)
         val diffMin = ((at - now.timeInMillis) / 60000).toInt()
         hintView.text = buildString {
-            append(if (tomorrow) "завтра " else "сегодня ")
-            append(String.format(java.util.Locale.US, "%02d:%02d", hour, minute))
-            append(" ±$windowMin мин")
-            append("\nчерез ${diffMin / 60} ч ${diffMin % 60} мин, не позже цели")
+            append(if (tomorrow) "завтра" else "сегодня")
+            append(" ±$windowMin мин · через ${diffMin / 60}ч ${diffMin % 60}м")
         }
     }
 
@@ -144,8 +155,8 @@ class AlarmSetupActivity : ComponentActivity() {
 
     private fun row(parent: LinearLayout, left: Pair<String, () -> Unit>, right: Pair<String, () -> Unit>) {
         val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        r.addView(smallBtn(left.first, left.second), LinearLayout.LayoutParams(0, dp(44), 1f).apply { rightMargin = dp(4) })
-        r.addView(smallBtn(right.first, right.second), LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(4) })
+        r.addView(smallBtn(left.first, left.second), LinearLayout.LayoutParams(0, dp(36), 1f).apply { rightMargin = dp(4) })
+        r.addView(smallBtn(right.first, right.second), LinearLayout.LayoutParams(0, dp(36), 1f).apply { leftMargin = dp(4) })
         parent.addView(r, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(5) })
@@ -171,8 +182,8 @@ class AlarmSetupActivity : ComponentActivity() {
             setOnClickListener { onClick() }
         }
         parent.addView(b, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(44)
-        ).apply { bottomMargin = dp(6) })
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(38)
+        ).apply { bottomMargin = dp(4) })
         return b
     }
 
