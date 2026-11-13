@@ -50,6 +50,12 @@ class ProbeActivity : ComponentActivity() {
         handleAutoIntent(intent)
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAutoIntent(intent)
+    }
+
     override fun onResume() {
         super.onResume()
         if (AlarmPlayer.active) {

@@ -30,9 +30,9 @@ class TestReceiver : BroadcastReceiver() {
             ACTION_START_FULL -> startLog(app, NightLogService.MODE_FULL, false)
             ACTION_STOP_LOG -> {
                 try {
-                    app.startService(
-                        Intent(app, NightLogService::class.java).setAction(NightLogService.ACTION_STOP)
-                    )
+                    Prefs.setRunning(app, false)
+                    app.stopService(Intent(app, NightLogService::class.java))
+                    UiLog.add("лог остановлен через stopService")
                 } catch (t: Throwable) {
                     UiLog.add("stop: $t")
                 }
