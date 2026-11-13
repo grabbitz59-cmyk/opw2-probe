@@ -55,6 +55,11 @@
             android:foregroundServiceType="health" />
 
         <activity
+            android:name=".AlarmSetupActivity"
+            android:exported="false"
+            android:label="@string/app_name" />
+
+        <activity
             android:name=".LogActivity"
             android:exported="false"
             android:label="@string/app_name" />

@@ -421,4 +421,8 @@ object Prefs {
     fun alarmAt(c: Context) = sp(c).getLong("alarm_at", 0L)
     fun setWindowMin(c: Context, v: Int) = sp(c).edit().putInt("window_min", v).apply()
     fun windowMin(c: Context) = sp(c).getInt("window_min", 30)
+    fun setTargetHour(c: Context, v: Int) = sp(c).edit().putInt("target_h", v).apply()
+    fun targetHour(c: Context) = sp(c).getInt("target_h", 7)
+    fun setTargetMinute(c: Context, v: Int) = sp(c).edit().putInt("target_m", v).apply()
+    fun targetMinute(c: Context) = sp(c).getInt("target_m", 0)
 }
