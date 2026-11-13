@@ -66,6 +66,24 @@
             android:exported="false" />
 
         <receiver
+            android:name=".TestReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="io.github.smartalarm.RUN_SENSORS" />
+                <action android:name="io.github.smartalarm.RUN_HS" />
+                <action android:name="io.github.smartalarm.RUN_HC" />
+                <action android:name="io.github.smartalarm.RUN_PPG" />
+                <action android:name="io.github.smartalarm.RUN_RAW" />
+                <action android:name="io.github.smartalarm.START_ECO" />
+                <action android:name="io.github.smartalarm.START_ECO_NW" />
+                <action android:name="io.github.smartalarm.START_FULL" />
+                <action android:name="io.github.smartalarm.STOP_LOG" />
+                <action android:name="io.github.smartalarm.STOP_ALARM" />
+                <action android:name="io.github.smartalarm.DUMP_LOG" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".BootReceiver"
             android:exported="true">
             <intent-filter>
