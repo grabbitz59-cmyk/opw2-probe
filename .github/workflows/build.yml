@@ -28,8 +28,20 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Decode keystore
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/probe.p12"
+          ls -l "$RUNNER_TEMP/probe.p12"
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+
       - name: Build debug APK
         run: gradle --no-daemon --stacktrace assembleDebug
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/probe.p12
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: probe
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Collect APK
         run: |

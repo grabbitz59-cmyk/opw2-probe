@@ -94,6 +94,11 @@ class ProbeActivity : ComponentActivity() {
             }.start()
         }
         btn("9 Тест будильника через 2 мин") { testAlarm() }
+        btn("P Тест PPG / вендорных сенсоров") {
+            val sm = getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager
+            runReport("Ppg") { PpgTest.run(sm, 8000) }
+        }
+        btn("10 Разрешения и статус") { append(permsReport()) }
 
         val logScroll = ScrollView(this)
         logView = TextView(this).apply {
@@ -159,6 +164,16 @@ class ProbeActivity : ComponentActivity() {
     }
 
     private fun startLog(mode: String, noWake: Boolean) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED) {
+            append("Сначала выдайте BODY_SENSORS: запрашиваю…")
+            permLauncher.launch(
+                arrayOf(
+                    Manifest.permission.BODY_SENSORS,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                )
+            )
+            return
+        }
         val svc = Intent(this, NightLogService::class.java).apply {
             action = NightLogService.ACTION_START
             putExtra(NightLogService.EXTRA_MODE, mode)
@@ -199,6 +214,34 @@ class ProbeActivity : ComponentActivity() {
         startService(svc)
         append("Стоп лога")
         updateStatus()
+    }
+
+    private fun permsReport(): String {
+        val sb = StringBuilder()
+        val wanted = listOf(
+            Manifest.permission.BODY_SENSORS,
+            Manifest.permission.BODY_SENSORS_BACKGROUND,
+            Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.WAKE_LOCK,
+            Manifest.permission.VIBRATE,
+        )
+        for (p in wanted) {
+            val ok = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+            sb.appendLine("${p.substringAfterLast('.')} = ${if (ok) "OK" else "НЕТ"}")
+        }
+        val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+        sb.appendLine("exactAlarms = ${if (Build.VERSION.SDK_INT >= 31) am.canScheduleExactAlarms() else true}")
+        sb.appendLine("running = ${NightLogService.isRunning}")
+        sb.appendLine("dir = ${extDir().absolutePath}")
+        sb.appendLine("errorLog:")
+        sb.appendLine(readErrorLog())
+        return sb.toString()
+    }
+
+    private fun readErrorLog(): String = try {
+        File(extDir(), "probe_error.txt").readText()
+    } catch (_: Throwable) {
+        "нет"
     }
 
     private fun extDir(): File = getExternalFilesDir(null) ?: filesDir

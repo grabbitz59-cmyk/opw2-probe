@@ -130,6 +130,7 @@ class NightLogService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        startedAt = System.currentTimeMillis()
         if (intent?.action == ACTION_STOP) {
             Prefs.setRunning(this, false)
             stopSelf()
@@ -137,30 +138,49 @@ class NightLogService : Service(), SensorEventListener {
         }
         if (isRunning) return START_STICKY
 
-        mode = intent?.getStringExtra(EXTRA_MODE) ?: Prefs.mode(this)
-        Prefs.setMode(this, mode)
-        Prefs.setRunning(this, true)
+        try {
+            mode = intent?.getStringExtra(EXTRA_MODE) ?: Prefs.mode(this)
+            Prefs.setMode(this, mode)
+            Prefs.setRunning(this, true)
 
-        startInForeground("Старт…")
-        val noWake = intent?.getBooleanExtra(EXTRA_NOWAKELOCK, Prefs.noWake(this)) ?: Prefs.noWake(this)
-        Prefs.setNoWake(this, noWake)
-        if (!noWake) acquireWakeLock()
-        openLog()
-        writeRaw("# start mode=$mode wakelock=${!noWake} device=${Build.MODEL} sdk=${Build.VERSION.SDK_INT}")
-        startBatteryReceiver()
+            if (!startInForeground("Старт…")) {
+                errorLog("не удалось войти в foreground, останавливаюсь", null)
+                Prefs.setRunning(this, false)
+                stopSelf()
+                return START_NOT_STICKY
+            }
 
-        val ok = accel?.let { sm.registerListener(this, it, 40_000, 5_000_000, handler) } == true
-        writeRaw("# accel register=$ok hrSensor=${hr?.name ?: "none"}")
-        if (!ok) {
-            startInForeground("Акселерометр недоступен")
+            val noWake = intent?.getBooleanExtra(EXTRA_NOWAKELOCK, Prefs.noWake(this)) ?: Prefs.noWake(this)
+            Prefs.setNoWake(this, noWake)
+            if (!noWake) acquireWakeLock()
+            openLog()
+            writeRaw("# start mode=$mode wakelock=${!noWake} device=${Build.MODEL} sdk=${Build.VERSION.SDK_INT}")
+            writeRaw("# perms body=" + granted(android.Manifest.permission.BODY_SENSORS) +
+                " bodyBg=" + granted(android.Manifest.permission.BODY_SENSORS_BACKGROUND) +
+                " notif=" + granted(android.Manifest.permission.POST_NOTIFICATIONS))
+            startBatteryReceiver()
+
+            val ok = accel?.let { sm.registerListener(this, it, 40_000, 5_000_000, handler) } == true
+            writeRaw("# accel register=$ok hrSensor=${hr?.name ?: "none"}")
+            if (!ok) {
+                startInForeground("Акселерометр недоступен")
+            }
+
+            handler.post(bucket)
+            handler.post(hrOn)
+            isRunning = true
+        } catch (t: Throwable) {
+            errorLog("onStartCommand упал", t)
+            Prefs.setRunning(this, false)
+            isRunning = false
+            stopSelf()
+            return START_NOT_STICKY
         }
-
-        handler.post(bucket)
-        handler.post(hrOn)
-        isRunning = true
-        startedAt = System.currentTimeMillis()
         return START_STICKY
     }
+
+    private fun granted(p: String): Boolean =
+        checkSelfPermission(p) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
     override fun onDestroy() {
         Prefs.setRunning(this, false)
@@ -185,13 +205,13 @@ class NightLogService : Service(), SensorEventListener {
         nm.createNotificationChannel(ch)
     }
 
-    private fun startInForeground(text: String) {
+    private fun buildNotification(text: String): Notification {
         val pi = PendingIntent.getActivity(
             this, 0,
             Intent(this, ProbeActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val n: Notification = Notification.Builder(this, CHANNEL_ID)
+        return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("OPW2 Probe: $mode")
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_probe)
@@ -199,10 +219,39 @@ class NightLogService : Service(), SensorEventListener {
             .setShowWhen(false)
             .setContentIntent(pi)
             .build()
+    }
+
+    private fun startInForeground(text: String): Boolean {
+        val n = buildNotification(text)
         if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIFICATION_ID, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)
-        } else {
+            try {
+                startForeground(NOTIFICATION_ID, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_HEALTH)
+                return true
+            } catch (t: Throwable) {
+                errorLog("startForeground(health) не удался", t)
+            }
+        }
+        return try {
             startForeground(NOTIFICATION_ID, n)
+            true
+        } catch (t: Throwable) {
+            errorLog("startForeground(plain) не удался", t)
+            false
+        }
+    }
+
+    private fun errorLog(msg: String, t: Throwable?) {
+        try {
+            val dir = getExternalFilesDir(null) ?: filesDir
+            if (!dir.exists()) dir.mkdirs()
+            val sb = StringBuilder()
+            sb.append(Instant.now()).append(" ").append(msg).append('\n')
+            if (t != null) {
+                sb.append(t.toString()).append('\n')
+                sb.append(t.stackTraceToString()).append('\n')
+            }
+            File(dir, "probe_error.txt").appendText(sb.toString())
+        } catch (_: Throwable) {
         }
     }
 
