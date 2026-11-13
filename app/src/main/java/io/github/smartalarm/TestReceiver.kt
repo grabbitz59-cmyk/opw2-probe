@@ -34,6 +34,26 @@ class TestReceiver : BroadcastReceiver() {
                 )
             }
             ACTION_STOP_ALARM -> AlarmPlayer.stop(app)
+            ACTION_RUN_PASSIVE -> {
+                Thread {
+                    val text = HealthPassive.start(app)
+                    File(dir, "report_Passive.txt").writeText(text)
+                    UiLog.add(text)
+                }.start()
+            }
+            ACTION_STOP_PASSIVE -> {
+                Thread {
+                    val text = HealthPassive.stop(app)
+                    UiLog.add(text)
+                }.start()
+            }
+            ACTION_PASSIVE_TAIL -> {
+                Thread {
+                    val text = HealthLog.tail(app, 60)
+                    File(dir, "report_PassiveTail.txt").writeText(text)
+                    UiLog.add(text)
+                }.start()
+            }
             ACTION_DUMP_LOG -> {
                 File(dir, "screen_log.txt").writeText(UiLog.text())
             }
@@ -81,5 +101,8 @@ class TestReceiver : BroadcastReceiver() {
         const val ACTION_STOP_LOG = "io.github.smartalarm.STOP_LOG"
         const val ACTION_STOP_ALARM = "io.github.smartalarm.STOP_ALARM"
         const val ACTION_DUMP_LOG = "io.github.smartalarm.DUMP_LOG"
+        const val ACTION_RUN_PASSIVE = "io.github.smartalarm.RUN_PASSIVE"
+        const val ACTION_STOP_PASSIVE = "io.github.smartalarm.STOP_PASSIVE"
+        const val ACTION_PASSIVE_TAIL = "io.github.smartalarm.PASSIVE_TAIL"
     }
 }

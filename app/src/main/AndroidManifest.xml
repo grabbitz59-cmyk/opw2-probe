@@ -40,6 +40,15 @@
         </activity>
 
         <service
+            android:name=".PassiveService"
+            android:exported="true"
+            android:permission="com.google.android.wearable.healthservices.permission.PASSIVE_DATA_BINDING">
+            <intent-filter>
+                <action android:name="androidx.health.services.client.PASSIVE_LISTENER_SERVICE" />
+            </intent-filter>
+        </service>
+
+        <service
             android:name=".NightLogService"
             android:exported="false"
             android:foregroundServiceType="health" />
@@ -80,6 +89,9 @@
                 <action android:name="io.github.smartalarm.STOP_LOG" />
                 <action android:name="io.github.smartalarm.STOP_ALARM" />
                 <action android:name="io.github.smartalarm.DUMP_LOG" />
+                <action android:name="io.github.smartalarm.RUN_PASSIVE" />
+                <action android:name="io.github.smartalarm.STOP_PASSIVE" />
+                <action android:name="io.github.smartalarm.PASSIVE_TAIL" />
             </intent-filter>
         </receiver>
 

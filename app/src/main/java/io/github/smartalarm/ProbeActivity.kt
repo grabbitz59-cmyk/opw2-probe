@@ -119,6 +119,20 @@ class ProbeActivity : ComponentActivity() {
         btn(root, "9 Будильник через 2 мин") { testAlarm() }
         btn(root, "9b Будильник СЕЙЧАС") { testAlarmNow() }
 
+        section(root, "СИСТЕМНЫЙ HR / СОН")
+        btn(root, "PASS старт") {
+            Thread {
+                append(HealthPassive.start(this))
+                runOnUiThread { refreshPreview() }
+            }.start()
+        }
+        btn(root, "PASS стоп") {
+            Thread { append(HealthPassive.stop(this)) }.start()
+        }
+        btn(root, "PASS лог") {
+            Thread { append(HealthLog.tail(this, 40)) }.start()
+        }
+
         section(root, "НОЧНОЙ ЛОГ")
         btn(root, "4 Старт: ЭКОНОМ") { startLog(NightLogService.MODE_ECO, false) }
         btn(root, "4b ЭКОНОМ без wakelock") { startLog(NightLogService.MODE_ECO, true) }

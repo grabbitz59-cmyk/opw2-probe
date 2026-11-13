@@ -168,6 +168,10 @@ class NightLogService : Service(), SensorEventListener {
 
             handler.post(bucket)
             handler.post(hrOn)
+            Thread {
+                val r = HealthPassive.start(this)
+                writeRaw("# passive: " + r.replace("\n", " | "))
+            }.start()
             isRunning = true
         } catch (t: Throwable) {
             errorLog("onStartCommand упал", t)
