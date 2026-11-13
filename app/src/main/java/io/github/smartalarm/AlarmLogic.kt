@@ -23,12 +23,16 @@ object AlarmLogic {
 
     private val hrSamples = ArrayList<Pair<Long, Float>>()
     private val lock = Any()
+    private var sawAsleep = false
+    private var tick = 0
 
     fun arm(ctx: Context, targetAtMs: Long, windowMin: Int) {
         targetAt = targetAtMs
         windowMs = windowMin * 60_000L
         triggered = false
         synchronized(lock) { hrSamples.clear() }
+        sawAsleep = false
+        tick = 0
         Prefs.setAlarmAt(ctx, targetAtMs)
         Prefs.setWindowMin(ctx, windowMin)
         scheduleFallback(ctx, targetAtMs)
@@ -102,14 +106,27 @@ object AlarmLogic {
         val motion = moves >= 6 || std > 0.10 || p2p > 1.2
         val hrRise = hr != null && base != null && (hr - base) >= 3.0f
         val state = HealthState.freshestate(20 * 60_000L)
-        val awake = state != null && state != "USER_ACTIVITY_ASLEEP"
+        val awake = sawAsleep && state != null && state != "USER_ACTIVITY_ASLEEP"
+
+        tick++
+        if (tick % 10 == 0) {
+            log(ctx, "tick hr=$hr base=$base moves=$moves std=$std state=$state asleep_seen=$sawAsleep")
+        }
 
         if (motion && (hrRise || awake)) {
             trigger(ctx, "smart moves=$moves std=$std hr=$hr base=$base state=$state")
         }
     }
 
+    fun onAsleep(ctx: Context) {
+        if (!sawAsleep) {
+            sawAsleep = true
+            log(ctx, "asleep detected")
+        }
+    }
+
     fun onArousalSignal(ctx: Context, why: String) {
+        if (!sawAsleep) return
         if (targetAt <= 0 || triggered) return
         val now = System.currentTimeMillis()
         if (now < targetAt - windowMs || now >= targetAt) return

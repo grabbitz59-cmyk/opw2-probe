@@ -107,7 +107,9 @@ object HealthLog {
             val state = info.userActivityState
             val ts = Instant.now().toString()
             HealthState.updateState(state.name, System.currentTimeMillis())
-            if (state.name != "USER_ACTIVITY_ASLEEP") {
+            if (state.name == "USER_ACTIVITY_ASLEEP") {
+                AlarmLogic.onAsleep(ctx)
+            } else {
                 AlarmLogic.onArousalSignal(ctx, "->${state.name}")
             }
             raw(
