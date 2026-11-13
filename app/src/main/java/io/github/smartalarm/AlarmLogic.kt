@@ -25,6 +25,7 @@ object AlarmLogic {
     private val lock = Any()
     private var sawAsleep = false
     private var tick = 0
+    private var lastMotionTs = 0L
 
     fun arm(ctx: Context, targetAtMs: Long, windowMin: Int) {
         targetAt = targetAtMs
@@ -33,6 +34,7 @@ object AlarmLogic {
         synchronized(lock) { hrSamples.clear() }
         sawAsleep = false
         tick = 0
+        lastMotionTs = System.currentTimeMillis()
         Prefs.setAlarmAt(ctx, targetAtMs)
         Prefs.setWindowMin(ctx, windowMin)
         scheduleFallback(ctx, targetAtMs)
@@ -104,6 +106,14 @@ object AlarmLogic {
         val base = baseline()
         val hr = HealthState.freshHr()
         val motion = moves >= 6 || std > 0.10 || p2p > 1.2
+        if (motion) lastMotionTs = now
+        if (!sawAsleep) {
+            val inferred = inferAsleep(now)
+            if (inferred) {
+                sawAsleep = true
+                log(ctx, "inferred asleep (quiet ${(now - lastMotionTs) / 60000}m)")
+            }
+        }
         val hrRise = hr != null && base != null && (hr - base) >= 3.0f
         val state = HealthState.freshestate(20 * 60_000L)
         val awake = sawAsleep && state != null && state != "USER_ACTIVITY_ASLEEP"
@@ -131,6 +141,17 @@ object AlarmLogic {
         val now = System.currentTimeMillis()
         if (now < targetAt - windowMs || now >= targetAt) return
         trigger(ctx, "state $why")
+    }
+
+    private fun inferAsleep(now: Long): Boolean {
+        if (now - lastMotionTs < 15 * 60_000L) return false
+        val recent = synchronized(lock) {
+            hrSamples.filter { now - it.first < 20 * 60_000L }.map { it.second }
+        }
+        if (recent.size < 15) return false
+        val mean = recent.average()
+        val sd = kotlin.math.sqrt(recent.map { (it - mean) * (it - mean) }.average())
+        return sd < 3.5
     }
 
     private fun baseline(): Float? {
