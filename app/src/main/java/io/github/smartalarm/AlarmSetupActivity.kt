@@ -63,6 +63,9 @@ class AlarmSetupActivity : ComponentActivity() {
         row(root, "−1ч" to { shift(-60) }, "+1ч" to { shift(60) })
         row(root, "−5м" to { shift(-5) }, "+5м" to { shift(5) })
 
+        val wb = wide(root, "Окно: ${windowMin} мин") { cycleWindow() }
+        windowBtn = wb
+
         wide(root, "СОХРАНИТЬ И СПАТЬ") { saveAndSleep() }
 
 
@@ -94,8 +97,8 @@ class AlarmSetupActivity : ComponentActivity() {
         val now = Calendar.getInstance()
         val tomorrow = cal.get(Calendar.DAY_OF_YEAR) != now.get(Calendar.DAY_OF_YEAR)
         val diffMin = ((at - now.timeInMillis) / 60000).toInt()
+        windowBtn?.text = "Окно: $windowMin мин"
         hintView.text = buildString {
-            append("Окно $windowMin мин · ")
             append(if (tomorrow) "завтра" else "сегодня")
             append(" через ${diffMin / 60}ч ${diffMin % 60}м")
         }
