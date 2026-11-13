@@ -78,6 +78,11 @@ class ProbeActivity : ComponentActivity() {
                 startLog(NightLogService.MODE_FULL, i.getBooleanExtra("nowake", false))
             }
         }
+        val at = i.getLongExtra("alarm_at", 0L)
+        if (at > 0) {
+            AlarmLogic.arm(this, at, i.getIntExtra("window_min", 30))
+            append("AUTO: будильник на ${java.time.Instant.ofEpochMilli(at)}")
+        }
         if (i.getBooleanExtra("autostop", false)) {
             append("AUTO: стоп лога")
             stopLog()
