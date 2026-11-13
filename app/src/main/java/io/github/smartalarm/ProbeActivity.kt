@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -23,9 +24,8 @@ import java.io.File
 
 class ProbeActivity : ComponentActivity() {
 
-    private lateinit var logView: TextView
+    private lateinit var previewView: TextView
     private lateinit var statusView: TextView
-    private lateinit var root: LinearLayout
 
     private val permLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -46,7 +46,7 @@ class ProbeActivity : ComponentActivity() {
         AppCtx.init(applicationContext)
         buildUi()
         requestBasePermissions()
-        append("Готов. Сначала «1 Сенсоры» и «2 Health Services».")
+        append("Готов. Начните с кнопки «Разрешения».")
     }
 
     override fun onResume() {
@@ -56,69 +56,100 @@ class ProbeActivity : ComponentActivity() {
             append("Будильник остановлен открытием приложения")
         }
         updateStatus()
+        refreshPreview()
     }
 
     private fun buildUi() {
         val scroll = ScrollView(this)
-        root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+        scroll.isFillViewport = true
+        scroll.setOnGenericMotionListener { v, e ->
+            if (e.action == MotionEvent.ACTION_SCROLL) {
+                v.scrollBy(0, (-e.getAxisValue(MotionEvent.AXIS_SCROLL) * dp(80)).toInt())
+                true
+            } else {
+                false
+            }
         }
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(32), dp(14), dp(32), dp(40))
+        }
+
         statusView = TextView(this).apply {
-            setTextColor(Color.GRAY)
-            textSize = 10f
-            setPadding(0, 0, 0, dp(4))
+            setTextColor(Color.LTGRAY)
+            textSize = 9f
+            setPadding(0, 0, 0, dp(6))
         }
         root.addView(statusView, lp())
 
-        btn("1 Сенсоры") { runReport("Sensors") { Reports.sensorDump(this) } }
-        btn("2 Health Services") { runReport("HealthServices") { Reports.healthServices() } }
-        btn("3 Health Connect: статус") { runReport("HealthConnect") { Reports.healthConnect(this) } }
-        btn("3b HC: запросить сон") {
+        btn(root, "Разрешения") { append(permsReport()) }
+        btn(root, "ЛОГ") {
+            startActivity(Intent(this, LogActivity::class.java))
+        }
+
+        previewView = TextView(this).apply {
+            typeface = Typeface.MONOSPACE
+            textSize = 8f
+            setTextColor(Color.GRAY)
+            setPadding(0, 0, 0, dp(4))
+            height = dp(52)
+        }
+        root.addView(previewView, lp())
+
+        section(root, "ДАТЧИКИ")
+        btn(root, "1 Сенсоры") { runReport("Sensors") { Reports.sensorDump(this) } }
+        btn(root, "2 Health Services") { runReport("HealthServices") { Reports.healthServices() } }
+        btn(root, "3 Health Connect") { runReport("HealthConnect") { Reports.healthConnect(this) } }
+        btn(root, "3b HC: запросить сон") {
             runCatching {
                 hcLauncher.launch(setOf(Reports.SLEEP_PERMISSION))
             }.onFailure { append("HC launch error: $it") }
         }
+        btn(root, "P Тест PPG (1 мин)") {
+            val sm = getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager
+            runReport("Ppg") { PpgTest.run(sm) }
+        }
+        btn(root, "R Запись PPG 60 с") {
+            val sm = getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager
+            runReport("PpgRaw") { RawPpg.capture(sm, extDir(), 60_000) }
+        }
 
-        btn("4 Старт: ЭКОНОМ (HR 1/5 мин)") { startLog(NightLogService.MODE_ECO, false) }
-        btn("5 Старт: ПОЛНЫЙ (HR 1/мин)") { startLog(NightLogService.MODE_FULL, false) }
-        btn("4b ЭКОНОМ без wakelock") { startLog(NightLogService.MODE_ECO, true) }
-        btn("6 СТОП лог") { stopLog() }
-        btn("7 Путь к файлам / итог") {
+        section(root, "БУДИЛЬНИК")
+        btn(root, "9 Будильник через 2 мин") { testAlarm() }
+        btn(root, "9b Будильник СЕЙЧАС") { testAlarmNow() }
+
+        section(root, "НОЧНОЙ ЛОГ")
+        btn(root, "4 Старт: ЭКОНОМ") { startLog(NightLogService.MODE_ECO, false) }
+        btn(root, "4b ЭКОНОМ без wakelock") { startLog(NightLogService.MODE_ECO, true) }
+        btn(root, "5 Старт: ПОЛНЫЙ") { startLog(NightLogService.MODE_FULL, false) }
+        btn(root, "6 СТОП лог") { stopLog() }
+        btn(root, "7 Путь / итог") {
             append("running=${NightLogService.isRunning}")
             append("csv=${NightLogService.currentPath.ifEmpty { Prefs.path(this) }}")
             append("dir=${extDir().absolutePath}")
             append(readSummary())
         }
-        btn("8 Сводка по последнему логу") {
+        btn(root, "8 Сводка по логу") {
             Thread {
                 val f = Summary.latestCsv(extDir())
                 val text = if (f == null) "нет CSV в ${extDir().absolutePath}" else Summary.build(f)
                 runOnUiThread { append("=== Сводка ===\n$text") }
             }.start()
         }
-        btn("9 Тест будильника через 2 мин") { testAlarm() }
-        btn("9b Будильник СЕЙЧАС") { testAlarmNow() }
-        btn("P Тест PPG / вендорных сенсоров") {
-            val sm = getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager
-            runReport("Ppg") { PpgTest.run(sm) }
-        }
-        btn("10 Разрешения и статус") { append(permsReport()) }
-
-        val logScroll = ScrollView(this)
-        logView = TextView(this).apply {
-            typeface = Typeface.MONOSPACE
-            textSize = 9f
-            setTextColor(Color.WHITE)
-            setTextIsSelectable(true)
-        }
-        logScroll.addView(logView)
-        root.addView(logScroll, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f
-        ))
 
         scroll.addView(root)
         setContentView(scroll)
+    }
+
+    private fun section(parent: LinearLayout, title: String) {
+        val tv = TextView(this).apply {
+            text = title
+            setTextColor(Color.parseColor("#80CBC4"))
+            textSize = 9f
+            setPadding(0, dp(10), 0, dp(2))
+        }
+        parent.addView(tv, lp())
     }
 
     private fun lp() = LinearLayout.LayoutParams(
@@ -129,18 +160,20 @@ class ProbeActivity : ComponentActivity() {
         TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics
     ).toInt()
 
-    private fun btn(label: String, onClick: () -> Unit) {
+    private fun btn(parent: LinearLayout, label: String, onClick: () -> Unit) {
         val b = Button(this).apply {
             text = label
-            textSize = 11f
+            textSize = 10.5f
             isAllCaps = false
             gravity = Gravity.CENTER
             minHeight = 0
             minimumHeight = 0
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(8), dp(8), dp(8), dp(8))
             setOnClickListener { onClick() }
         }
-        root.addView(b, lp())
+        parent.addView(b, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(42)
+        ).apply { bottomMargin = dp(5) })
     }
 
     private fun requestBasePermissions() {
@@ -157,38 +190,64 @@ class ProbeActivity : ComponentActivity() {
     }
 
     private fun updateStatus() {
-        val portraits = listOf(
+        val grants = listOf(
             Manifest.permission.BODY_SENSORS,
             Manifest.permission.POST_NOTIFICATIONS,
             Manifest.permission.BODY_SENSORS_BACKGROUND,
         ).joinToString(" ") { p ->
             val ok = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
-            "${p.substringAfterLast('.')}=${if (ok) "OK" else "NO"}"
+            "${p.substringAfterLast('.').replace("BODY_", "")}=${if (ok) "OK" else "NO"}"
         }
-        statusView.text = "$portraits\n${installInfo()} | log=${NightLogService.isRunning}"
+        statusView.text = "$grants\n${installInfo()} | log=${NightLogService.isRunning}"
     }
 
     private fun installInfo(): String = try {
         val pi = packageManager.getPackageInfo(packageName, 0)
-        "v${pi.versionName} upd=${java.time.Instant.ofEpochMilli(pi.lastUpdateTime)}"
+        "v${pi.versionName}"
     } catch (t: Throwable) {
         "v?"
     }
 
+    private fun permsReport(): String {
+        val sb = StringBuilder()
+        val wanted = listOf(
+            Manifest.permission.BODY_SENSORS,
+            Manifest.permission.BODY_SENSORS_BACKGROUND,
+            Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.WAKE_LOCK,
+            Manifest.permission.VIBRATE,
+        )
+        for (p in wanted) {
+            val ok = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
+            sb.appendLine("${p.substringAfterLast('.')} = ${if (ok) "OK" else "НЕТ"}")
+        }
+        val nm = getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        sb.appendLine("notificationsEnabled = ${nm.areNotificationsEnabled()}")
+        val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
+        sb.appendLine("exactAlarms = ${if (Build.VERSION.SDK_INT >= 31) am.canScheduleExactAlarms() else true}")
+        sb.appendLine("running = ${NightLogService.isRunning}")
+        sb.appendLine("dir = ${extDir().absolutePath}")
+        sb.appendLine("errorLog:")
+        sb.appendLine(readErrorLog())
+        return sb.toString()
+    }
+
+    private fun readErrorLog(): String = try {
+        File(extDir(), "probe_error.txt").readText()
+    } catch (_: Throwable) {
+        "нет"
+    }
+
     private fun testAlarmNow() {
-        append("Запускаю будильник немедленно")
+        append("Будильник: СЕЙЧАС")
         sendBroadcast(Intent(this, AlarmTestReceiver::class.java))
-        append("Если экран «ПОДЪЁМ» с кнопкой ОСТАНОВИТЬ не появился — это старая сборка или нет разрешения на уведомления")
     }
 
     private fun startLog(mode: String, noWake: Boolean) {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS) != PackageManager.PERMISSION_GRANTED) {
-            append("Сначала выдайте BODY_SENSORS: запрашиваю…")
+            append("Нет BODY_SENSORS — запрашиваю")
             permLauncher.launch(
-                arrayOf(
-                    Manifest.permission.BODY_SENSORS,
-                    Manifest.permission.POST_NOTIFICATIONS,
-                )
+                arrayOf(Manifest.permission.BODY_SENSORS, Manifest.permission.POST_NOTIFICATIONS)
             )
             return
         }
@@ -212,17 +271,16 @@ class ProbeActivity : ComponentActivity() {
         val at = System.currentTimeMillis() + 120_000
         try {
             am.setAlarmClock(android.app.AlarmManager.AlarmClockInfo(at, pi), pi)
-            append("Будильник поставлен на ${java.time.Instant.ofEpochMilli(at)} (через 2 мин)")
+            append("Будильник на ${java.time.Instant.ofEpochMilli(at)}")
         } catch (t: Throwable) {
-            append("setAlarmClock не сработал: $t — ставлю обычный")
+            append("setAlarmClock: $t — обычный")
             try {
                 am.set(android.app.AlarmManager.RTC_WAKEUP, at, pi)
-                append("Обычный будильник на ${java.time.Instant.ofEpochMilli(at)}")
+                append("Обычный на ${java.time.Instant.ofEpochMilli(at)}")
             } catch (t2: Throwable) {
-                append("Будильник не поставился: $t2")
+                append("Не поставился: $t2")
             }
         }
-        append("Теперь можно свернуть приложение или переключить часы в энергосбережение и ждать вибрации.")
     }
 
     private fun stopLog() {
@@ -232,34 +290,6 @@ class ProbeActivity : ComponentActivity() {
         startService(svc)
         append("Стоп лога")
         updateStatus()
-    }
-
-    private fun permsReport(): String {
-        val sb = StringBuilder()
-        val wanted = listOf(
-            Manifest.permission.BODY_SENSORS,
-            Manifest.permission.BODY_SENSORS_BACKGROUND,
-            Manifest.permission.POST_NOTIFICATIONS,
-            Manifest.permission.WAKE_LOCK,
-            Manifest.permission.VIBRATE,
-        )
-        for (p in wanted) {
-            val ok = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
-            sb.appendLine("${p.substringAfterLast('.')} = ${if (ok) "OK" else "НЕТ"}")
-        }
-        val am = getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager
-        sb.appendLine("exactAlarms = ${if (Build.VERSION.SDK_INT >= 31) am.canScheduleExactAlarms() else true}")
-        sb.appendLine("running = ${NightLogService.isRunning}")
-        sb.appendLine("dir = ${extDir().absolutePath}")
-        sb.appendLine("errorLog:")
-        sb.appendLine(readErrorLog())
-        return sb.toString()
-    }
-
-    private fun readErrorLog(): String = try {
-        File(extDir(), "probe_error.txt").readText()
-    } catch (_: Throwable) {
-        "нет"
     }
 
     private fun extDir(): File = getExternalFilesDir(null) ?: filesDir
@@ -282,16 +312,21 @@ class ProbeActivity : ComponentActivity() {
                 File(extDir(), "report_$name.txt").writeText(text)
             } catch (_: Throwable) {
             }
-            runOnUiThread { append("=== $name ===\n$text") }
+            runOnUiThread {
+                append("=== $name ===")
+                append(text)
+            }
         }.start()
     }
 
     private fun append(line: String) {
-        val old = logView.text?.toString().orEmpty()
-        val merged = if (old.length > 20_000) old.takeLast(8_000) else old
-        logView.text = "$merged$line\n"
-        (logView.parent as? View)?.let { v ->
-            (v as? ScrollView)?.post { v.fullScroll(View.FOCUS_DOWN) }
-        }
+        UiLog.add(line)
+        runOnUiThread { refreshPreview() }
+    }
+
+    private fun refreshPreview() {
+        if (!::previewView.isInitialized) return
+        val all = UiLog.text().trimEnd('\n').lines()
+        previewView.text = all.takeLast(3).joinToString("\n")
     }
 }

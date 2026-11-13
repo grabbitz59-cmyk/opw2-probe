@@ -131,9 +131,18 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
         root.addView(title)
         root.addView(time)
         root.addView(stop)
+        root.setOnClickListener { finishAlarm() }
         setContentView(root)
 
         Handler(Looper.getMainLooper()).postDelayed(autoStop, 90_000L)
+    }
+
+    override fun dispatchKeyEvent(event: android.view.KeyEvent?): Boolean {
+        if (event != null && event.action == android.view.KeyEvent.ACTION_DOWN) {
+            finishAlarm()
+            return true
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun finishAlarm() {
