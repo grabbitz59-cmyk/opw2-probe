@@ -23,10 +23,10 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * Минимальный продуктовый экран: одно решение — «во сколько» и «разбуди в окне».
+ * РњРёРЅРёРјР°Р»СЊРЅС‹Р№ РїСЂРѕРґСѓРєС‚РѕРІС‹Р№ СЌРєСЂР°РЅ: РѕРґРЅРѕ СЂРµС€РµРЅРёРµ вЂ” В«РІРѕ СЃРєРѕР»СЊРєРѕВ» Рё В«СЂР°Р·Р±СѓРґРё РІ РѕРєРЅРµВ».
  *
- * Всё диагностическое (35 кнопок) осталось в [ProbeActivity] и открывается по «Диагностика»,
- * чтобы на 466×466 не приходилось листать 14 экранов.
+ * Р’СЃС‘ РґРёР°РіРЅРѕСЃС‚РёС‡РµСЃРєРѕРµ (35 РєРЅРѕРїРѕРє) РѕСЃС‚Р°Р»РѕСЃСЊ РІ [ProbeActivity] Рё РѕС‚РєСЂС‹РІР°РµС‚СЃСЏ РїРѕ В«Р”РёР°РіРЅРѕСЃС‚РёРєР°В»,
+ * С‡С‚РѕР±С‹ РЅР° 466Г—466 РЅРµ РїСЂРёС…РѕРґРёР»РѕСЃСЊ Р»РёСЃС‚Р°С‚СЊ 14 СЌРєСЂР°РЅРѕРІ.
  */
 class HomeActivity : ComponentActivity() {
 
@@ -52,7 +52,7 @@ class HomeActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         refresh()
-        if (missingPerms().isEmpty()) statusView.text = "разрешения выданы · можно ложиться"
+        if (missingPerms().isEmpty()) statusView.text = "СЂР°Р·СЂРµС€РµРЅРёСЏ РІС‹РґР°РЅС‹ В· РјРѕР¶РЅРѕ Р»РѕР¶РёС‚СЊСЃСЏ"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,11 +85,11 @@ class HomeActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setBackgroundColor(bg)
-            setPadding(dp(18), dp(10), dp(18), dp(12))
+            setPadding(dp(16), dp(6), dp(16), dp(8))
         }
 
         root.addView(TextView(this).apply {
-            text = "УМНЫЙ БУДИЛЬНИК"
+            text = "РЈРњРќР«Р™ Р‘РЈР”РР›Р¬РќРРљ"
             setTextColor(Color.parseColor("#546E7A"))
             textSize = 9f
             letterSpacing = 0.18f
@@ -99,9 +99,9 @@ class HomeActivity : ComponentActivity() {
         timeView = TextView(this).apply {
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            textSize = 42f
+            textSize = 38f
             gravity = Gravity.CENTER
-            setPadding(0, dp(2), 0, 0)
+            setPadding(0, dp(1), 0, 0)
             setOnClickListener { openSetup() }
         }
         root.addView(timeView, lp(top = 0))
@@ -119,7 +119,7 @@ class HomeActivity : ComponentActivity() {
                 text = "$w"
                 textSize = 12f
                 gravity = Gravity.CENTER
-                setPadding(0, dp(7), 0, dp(7))
+                setPadding(0, dp(5), 0, dp(5))
                 setOnClickListener {
                     windowMin = w
                     Prefs.setWindowMin(this@HomeActivity, w)
@@ -133,33 +133,33 @@ class HomeActivity : ComponentActivity() {
             )
             chips[w] = chip
         }
-        root.addView(chipRow, lp(top = 8))
+        root.addView(chipRow, lp(top = 6))
 
         primary = TextView(this).apply {
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#04211D"))
-            setPadding(0, dp(12), 0, dp(12))
+            setPadding(0, dp(10), 0, dp(10))
             setOnClickListener { onPrimary() }
         }
-        root.addView(primary, lp(top = 8))
+        root.addView(primary, lp(top = 6))
 
         statusView = TextView(this).apply {
             setTextColor(Color.parseColor("#90A4AE"))
             textSize = 9f
             gravity = Gravity.CENTER
         }
-        root.addView(statusView, lp(top = 7))
+        root.addView(statusView, lp(top = 5))
 
         val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         bottom.addView(
-            small("Тест 2 мин") { testAlarm() },
+            small("РўРµСЃС‚ 2 РјРёРЅ") { testAlarm() },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 .apply { marginEnd = dp(4) },
         )
         bottom.addView(
-            small("Диагностика") {
+            small("Р”РёР°РіРЅРѕСЃС‚РёРєР°") {
                 startActivity(Intent(this@HomeActivity, ProbeActivity::class.java))
             },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
@@ -179,7 +179,7 @@ class HomeActivity : ComponentActivity() {
         gravity = Gravity.CENTER
         setTextColor(Color.parseColor("#B0BEC5"))
         setBackgroundResource(R.drawable.bg_chip_off)
-        setPadding(0, dp(8), 0, dp(8))
+        setPadding(0, dp(6), 0, dp(6))
         setOnClickListener { onClick() }
     }
 
@@ -187,7 +187,7 @@ class HomeActivity : ComponentActivity() {
         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
     ).apply { topMargin = dp(top) }
 
-    // ---------- состояние ----------
+    // ---------- СЃРѕСЃС‚РѕСЏРЅРёРµ ----------
 
     private fun refresh() {
         timeView.text = String.format(Locale.US, "%02d:%02d", hour, minute)
@@ -198,9 +198,9 @@ class HomeActivity : ComponentActivity() {
         val tomorrow = cal.get(Calendar.DAY_OF_YEAR) != now.get(Calendar.DAY_OF_YEAR)
         val diffMin = ((at - now.timeInMillis) / 60000).toInt().coerceAtLeast(0)
         subView.text = buildString {
-            append(if (tomorrow) "завтра" else "сегодня")
-            append(" через ${diffMin / 60}ч ${diffMin % 60}м")
-            append(" · окно ±$windowMin мин")
+            append(if (tomorrow) "Р·Р°РІС‚СЂР°" else "СЃРµРіРѕРґРЅСЏ")
+            append(" С‡РµСЂРµР· ${diffMin / 60}С‡ ${diffMin % 60}Рј")
+            append(" В· РѕРєРЅРѕ В±$windowMin РјРёРЅ")
         }
 
         for ((w, chip) in chips) {
@@ -212,11 +212,11 @@ class HomeActivity : ComponentActivity() {
         val armed = isArmed()
         val running = NightLogService.isRunning
         if (armed && running) {
-            primary.text = "ОСТАНОВИТЬ НОЧЬ"
+            primary.text = "РћРЎРўРђРќРћР’РРўР¬ РќРћР§Р¬"
             primary.setBackgroundResource(R.drawable.bg_cta_stop)
             primary.setTextColor(Color.WHITE)
         } else {
-            primary.text = "СОХРАНИТЬ И СПАТЬ"
+            primary.text = "РЎРћРҐР РђРќРРўР¬ Р РЎРџРђРўР¬"
             primary.setBackgroundResource(R.drawable.bg_cta)
             primary.setTextColor(Color.parseColor("#04211D"))
         }
@@ -224,11 +224,11 @@ class HomeActivity : ComponentActivity() {
         val missing = missingPerms()
         statusView.setTextColor(Color.parseColor(if (missing.isEmpty()) "#90A4AE" else "#FF8A65"))
         statusView.text = when {
-            missing.isNotEmpty() -> "нет прав: " + missing.joinToString(", ") { it.substringAfterLast('.') }
+            missing.isNotEmpty() -> "РЅРµС‚ РїСЂР°РІ: " + missing.joinToString(", ") { it.substringAfterLast('.') }
             else -> buildString {
-                append(if (running) "лог идёт" else "лог выкл")
-                append(" · HR ").append(HealthState.sourceNow())
-                append(" · ").append(batteryPct()).append('%')
+                append(if (running) "Р»РѕРі РёРґС‘С‚" else "Р»РѕРі РІС‹РєР»")
+                append(" В· HR ").append(HealthState.sourceNow())
+                append(" В· ").append(batteryPct()).append('%')
             }
         }
     }
@@ -269,7 +269,7 @@ class HomeActivity : ComponentActivity() {
         -1
     }
 
-    // ---------- действия ----------
+    // ---------- РґРµР№СЃС‚РІРёСЏ ----------
 
     private fun onPrimary() {
         if (isArmed() && NightLogService.isRunning) {
@@ -279,7 +279,7 @@ class HomeActivity : ComponentActivity() {
         val missing = missingPerms()
         if (missing.isNotEmpty()) {
             statusView.setTextColor(Color.parseColor("#FF8A65"))
-            statusView.text = "сначала разрешения"
+            statusView.text = "СЃРЅР°С‡Р°Р»Р° СЂР°Р·СЂРµС€РµРЅРёСЏ"
             permLauncher.launch(missing.toTypedArray())
             return
         }
@@ -299,18 +299,18 @@ class HomeActivity : ComponentActivity() {
         try {
             ContextCompat.startForegroundService(this, svc)
             statusView.setTextColor(Color.parseColor("#90A4AE"))
-            statusView.text = "запускаю ночь…"
+            statusView.text = "Р·Р°РїСѓСЃРєР°СЋ РЅРѕС‡СЊвЂ¦"
         } catch (t: Throwable) {
             statusView.setTextColor(Color.parseColor("#FF8A65"))
-            statusView.text = "не удалось запустить: ${t.javaClass.simpleName}"
+            statusView.text = "РЅРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ: ${t.javaClass.simpleName}"
             return
         }
 
-        // P0: честный статус — не рапортовать успех, если сервис не поднялся
+        // P0: С‡РµСЃС‚РЅС‹Р№ СЃС‚Р°С‚СѓСЃ вЂ” РЅРµ СЂР°РїРѕСЂС‚РѕРІР°С‚СЊ СѓСЃРїРµС…, РµСЃР»Рё СЃРµСЂРІРёСЃ РЅРµ РїРѕРґРЅСЏР»СЃСЏ
         handler.postDelayed({
             if (!NightLogService.isRunning) {
                 statusView.setTextColor(Color.parseColor("#FF8A65"))
-                statusView.text = "лог НЕ запустился — открой Диагностику"
+                statusView.text = "Р»РѕРі РќР• Р·Р°РїСѓСЃС‚РёР»СЃСЏ вЂ” РѕС‚РєСЂРѕР№ Р”РёР°РіРЅРѕСЃС‚РёРєСѓ"
             }
             refresh()
         }, 2_500L)
@@ -330,7 +330,7 @@ class HomeActivity : ComponentActivity() {
 
     private fun testAlarm() {
         sendBroadcast(Intent(this, AlarmTestReceiver::class.java))
-        statusView.text = "тестовый будильник через 2 сек"
+        statusView.text = "С‚РµСЃС‚РѕРІС‹Р№ Р±СѓРґРёР»СЊРЅРёРє С‡РµСЂРµР· 2 СЃРµРє"
     }
 
     private fun openSetup() {
