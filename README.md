@@ -1,0 +1,56 @@
+# OPW2 Probe
+
+Диагностический APK для OnePlus Watch 2 (Wear OS 4). Ничего не будит — только собирает факты,
+по которым проектируется умный будильник.
+
+## Что делает
+
+1. **Сенсоры** — полный дамп `SensorManager`: имена, `stringType`, вендор, FIFO, min/max delay,
+   поиск HRV/PPG/RR-сенсоров. Плюс `BOARD/DEVICE/MODEL/SDK`.
+2. **Health Services** — capabilities `PassiveMonitoringClient` (какие типы данных реально
+   поддерживает OPW2: HR, HRV, SpO2, skin temp, активности) через рефлексию, поэтому APK не
+   падает на несовпадении версий API.
+3. **Health Connect** — статус провайдера, выданные разрешения, чтение `SleepSessionRecord`
+   за 30 дней (если OHealth пишет туда сон — увидим этапы и интервалы).
+4. **Ночной лог** в двух режимах:
+   - `ЭКОНОМ`: акселерометр 25 Гц (батчинг 5 с) + пульс 40 с каждые 5 минут;
+   - `ПОЛНЫЙ`: то же, но пульс 40 с каждую минуту.
+
+CSV на бакет 30 с: батарея, зарядка, температура батареи, экран, doze, пульс и его возраст,
+`n/mean/std/p2p` магнитуды акселерометра, число «рывков», число сэмплов пульса, uptime.
+
+Файлы пишутся в `getExternalFilesDir(null)`:
+`/sdcard/Android/data/io.github.smartalarm/files/probe_<mode>_<ts>.csv` + `summary.txt` +
+`report_*.txt`.
+
+## Сборка
+
+GitHub Actions, без локального SDK. Каждый пуш в `main` собирает `app-debug.apk`
+и обновляет релиз `nightly`.
+
+## Установка на часы
+
+На часах: Настройки → Система → О телефоне → 7× «Номер сборки» → Для разработчиков →
+«Отладка по Wi-Fi» (записать `IP:порт` и код сопряжения).
+
+```bash
+adb pair <IP>:<PAIR_PORT> <CODE>
+adb connect <IP>:<ADB_PORT>
+adb install -r opw2-probe.apk
+adb shell am start -n io.github.smartalarm/.ProbeActivity
+```
+
+Забрать данные:
+
+```bash
+adb shell ls /sdcard/Android/data/io.github.smartalarm/files/
+adb pull /sdcard/Android/data/io.github.smartalarm/files/ ./probe-data/
+```
+
+## Ночной протокол
+
+1. Надеть часы плотно, выключить always-on display, поставить на зарядку НЕЛЬЗЯ —
+   мерим расход от батареи, зарядить до 100% перед сном.
+2. Открыть приложение, выдать разрешения, нажать «Старт: ЭКОНОМ» (или «ПОЛНЫЙ»).
+3. Утром — «Стоп лог», затем выгрузить файлы через adb.
+4. Для сравнения режимов нужно 2 ночи (по одной на режим), в идеале на одинаковом заряде.
