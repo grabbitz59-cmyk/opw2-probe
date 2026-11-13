@@ -51,6 +51,10 @@ class ProbeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (AlarmPlayer.active) {
+            AlarmPlayer.stop(this)
+            append("Будильник остановлен открытием приложения")
+        }
         updateStatus()
     }
 
@@ -94,6 +98,7 @@ class ProbeActivity : ComponentActivity() {
             }.start()
         }
         btn("9 Тест будильника через 2 мин") { testAlarm() }
+        btn("9b Будильник СЕЙЧАС") { testAlarmNow() }
         btn("P Тест PPG / вендорных сенсоров") {
             val sm = getSystemService(android.content.Context.SENSOR_SERVICE) as android.hardware.SensorManager
             runReport("Ppg") { PpgTest.run(sm, 8000) }
@@ -160,7 +165,20 @@ class ProbeActivity : ComponentActivity() {
             val ok = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
             "${p.substringAfterLast('.')}=${if (ok) "OK" else "NO"}"
         }
-        statusView.text = "$portraits | log=${NightLogService.isRunning}"
+        statusView.text = "$portraits\n${installInfo()} | log=${NightLogService.isRunning}"
+    }
+
+    private fun installInfo(): String = try {
+        val pi = packageManager.getPackageInfo(packageName, 0)
+        "v${pi.versionName} upd=${java.time.Instant.ofEpochMilli(pi.lastUpdateTime)}"
+    } catch (t: Throwable) {
+        "v?"
+    }
+
+    private fun testAlarmNow() {
+        append("Запускаю будильник немедленно")
+        sendBroadcast(Intent(this, AlarmTestReceiver::class.java))
+        append("Если экран «ПОДЪЁМ» с кнопкой ОСТАНОВИТЬ не появился — это старая сборка или нет разрешения на уведомления")
     }
 
     private fun startLog(mode: String, noWake: Boolean) {

@@ -22,6 +22,19 @@ class AlarmTestReceiver : BroadcastReceiver() {
 
         AlarmPlayer.start(context)
 
+        try {
+            val dir = context.getExternalFilesDir(null) ?: context.filesDir
+            val nm0 = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            java.io.File(dir, "alarm_fired.txt").appendText(
+                "ui=" + try { context.startActivity(
+                    Intent(context, AlarmActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                ); "started" } catch (t: Throwable) { "failed: $t" } +
+                    " notifEnabled=" + nm0.areNotificationsEnabled() + "\n"
+            )
+        } catch (_: Throwable) {
+        }
+
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "Будильник", NotificationManager.IMPORTANCE_HIGH).apply {
