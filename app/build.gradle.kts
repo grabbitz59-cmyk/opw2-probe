@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "io.github.smartalarm"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.smartalarm"
