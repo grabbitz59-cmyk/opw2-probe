@@ -86,7 +86,7 @@ object HealthLog {
             for (p in hrPoints) {
                 val ts = Instant.now().toString()
                 val ms = System.currentTimeMillis()
-                val v = p.value
+                val v = (p.value as? Number)?.toFloat() ?: -1f
                 val bootMs = p.timeDurationFromBoot?.toMillis() ?: -1
                 HealthState.updateHr(v, ms, p.accuracy.toString())
                 synchronized(lock) {
