@@ -80,7 +80,7 @@ class NightLogService : Service(), SensorEventListener {
     }
     private var lastBattery: Intent? = null
 
-    private val bucket = object : Runnable {
+    private val bucket: Runnable = object : Runnable {
         override fun run() {
             try {
                 writeBucket()
@@ -92,7 +92,7 @@ class NightLogService : Service(), SensorEventListener {
         }
     }
 
-    private val hrOn = object : Runnable {
+    private val hrOn: Runnable = object : Runnable {
         override fun run() {
             val sensor = hr
             if (sensor == null) {
@@ -105,7 +105,7 @@ class NightLogService : Service(), SensorEventListener {
         }
     }
 
-    private val hrOff = object : Runnable {
+    private val hrOff: Runnable = object : Runnable {
         override fun run() {
             if (hrRegistered) {
                 sm.unregisterListener(this@NightLogService, hr)
