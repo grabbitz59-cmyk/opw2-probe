@@ -23,6 +23,7 @@ class AlarmSetupActivity : ComponentActivity() {
 
     private lateinit var timeView: TextView
     private lateinit var hintView: TextView
+    private var windowBtn: Button? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
