@@ -23,7 +23,6 @@ class AlarmSetupActivity : ComponentActivity() {
 
     private lateinit var timeView: TextView
     private lateinit var hintView: TextView
-    private lateinit var windowBtn: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,54 +41,24 @@ class AlarmSetupActivity : ComponentActivity() {
             setPadding(dp(22), dp(10), dp(22), dp(26))
         }
 
-        val titleRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        titleRow.addView(TextView(this).apply {
-            text = "БУДИЛЬНИК"
-            setTextColor(Color.parseColor("#80CBC4"))
-            textSize = 9f
-            gravity = Gravity.CENTER
-        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        titleRow.addView(Button(this).apply {
-            text = "✕"
-            textSize = 11f
-            isAllCaps = false
-            minimumHeight = 0
-            minHeight = 0
-            setPadding(0, 0, 0, 0)
-            setOnClickListener { finish() }
-        }, LinearLayout.LayoutParams(dp(34), dp(26)))
-        root.addView(titleRow, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
-
         timeView = TextView(this).apply {
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
             setTextColor(Color.WHITE)
-            textSize = 30f
+            textSize = 26f
             gravity = Gravity.CENTER
         }
         root.addView(timeView, lp())
 
         hintView = TextView(this).apply {
-            setTextColor(Color.LTGRAY)
-            textSize = 8f
+            setTextColor(Color.parseColor("#80CBC4"))
+            textSize = 9f
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(2))
+            setPadding(0, 0, 0, dp(4))
+            setOnClickListener { cycleWindow() }
         }
-        root.addView(hintView, lp())
-
-        windowBtn = wide(root, "") {
-            windowMin = when (windowMin) {
-                15 -> 30
-                30 -> 45
-                45 -> 60
-                else -> 15
-            }
-            refresh()
-        }
+        root.addView(hintView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ))
 
         row(root, "−1ч" to { shift(-60) }, "+1ч" to { shift(60) })
         row(root, "−5м" to { shift(-5) }, "+5м" to { shift(5) })
@@ -101,6 +70,16 @@ class AlarmSetupActivity : ComponentActivity() {
         setContentView(scroll)
     }
 
+    private fun cycleWindow() {
+        windowMin = when (windowMin) {
+            15 -> 30
+            30 -> 45
+            45 -> 60
+            else -> 15
+        }
+        refresh()
+    }
+
     private fun shift(deltaMinutes: Int) {
         val total = ((hour * 60 + minute + deltaMinutes) % 1440 + 1440) % 1440
         hour = total / 60
@@ -110,15 +89,15 @@ class AlarmSetupActivity : ComponentActivity() {
 
     private fun refresh() {
         timeView.text = String.format(java.util.Locale.US, "%02d:%02d", hour, minute)
-        windowBtn.text = "Окно: $windowMin мин"
         val at = targetEpoch()
         val cal = Calendar.getInstance().apply { timeInMillis = at }
         val now = Calendar.getInstance()
         val tomorrow = cal.get(Calendar.DAY_OF_YEAR) != now.get(Calendar.DAY_OF_YEAR)
         val diffMin = ((at - now.timeInMillis) / 60000).toInt()
         hintView.text = buildString {
+            append("Окно $windowMin мин · ")
             append(if (tomorrow) "завтра" else "сегодня")
-            append(" ±$windowMin мин · через ${diffMin / 60}ч ${diffMin % 60}м")
+            append(" через ${diffMin / 60}ч ${diffMin % 60}м")
         }
     }
 
