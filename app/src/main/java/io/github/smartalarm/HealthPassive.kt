@@ -26,6 +26,38 @@ class PassiveService : PassiveListenerService() {
     }
 }
 
+object HealthState {
+    @Volatile var hr: Float = -1f
+        private set
+    @Volatile var hrTs: Long = 0
+        private set
+    @Volatile var hrAccuracy: String = ""
+        private set
+    @Volatile var state: String = "?"
+        private set
+    @Volatile var stateTs: Long = 0
+        private set
+
+    fun updateHr(v: Float, ts: Long, acc: String) {
+        if (v > 0f) {
+            hr = v
+            hrTs = ts
+            hrAccuracy = acc
+        }
+    }
+
+    fun updateState(s: String, ts: Long) {
+        state = s
+        stateTs = ts
+    }
+
+    fun freshHr(maxAgeMs: Long = 300_000L): Float? =
+        if (hr > 0f && System.currentTimeMillis() - hrTs < maxAgeMs) hr else null
+
+    fun freshestate(maxAgeMs: Long = 900_000L): String? =
+        if (state != "?" && System.currentTimeMillis() - stateTs < maxAgeMs) state else null
+}
+
 object HealthLog {
     private const val FILE = "health_log.csv"
     private val lock = Any()
@@ -56,6 +88,7 @@ object HealthLog {
                 val ms = System.currentTimeMillis()
                 val v = p.value
                 val bootMs = p.timeDurationFromBoot?.toMillis() ?: -1
+                HealthState.updateHr(v, ms, p.accuracy.toString())
                 synchronized(lock) {
                     file(ctx).appendText("$ts,$ms,hr,$v,boot=${bootMs}acc=${p.accuracy}\n")
                 }
@@ -73,6 +106,10 @@ object HealthLog {
         try {
             val state = info.userActivityState
             val ts = Instant.now().toString()
+            HealthState.updateState(state.name, System.currentTimeMillis())
+            if (state.name != "USER_ACTIVITY_ASLEEP") {
+                AlarmLogic.onArousalSignal(ctx, "->${state.name}")
+            }
             raw(
                 ctx,
                 "$ts,${System.currentTimeMillis()},activity,${state.name},since=${info.stateChangeTime}"

@@ -144,6 +144,16 @@ class ProbeActivity : ComponentActivity() {
         btn(root, "9 Будильник через 2 мин") { testAlarm() }
         btn(root, "9b Будильник СЕЙЧАС") { testAlarmNow() }
 
+        section(root, "УМНЫЙ БУДИЛЬНИК")
+        btn(root, "Ночь +6ч (окно 30м)") { armNight(6.0) }
+        btn(root, "Ночь +7ч (окно 30м)") { armNight(7.0) }
+        btn(root, "Ночь +8ч (окно 30м)") { armNight(8.0) }
+        btn(root, "Снять будильник") {
+            AlarmLogic.disarm(this)
+            append("Будильник снят")
+            updateStatus()
+        }
+
         section(root, "СИСТЕМНЫЙ HR / СОН")
         btn(root, "PASS старт") {
             Thread {
@@ -238,7 +248,10 @@ class ProbeActivity : ComponentActivity() {
             val ok = ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
             "${p.substringAfterLast('.').replace("BODY_", "")}=${if (ok) "OK" else "NO"}"
         }
-        statusView.text = "$grants\n${installInfo()} | log=${NightLogService.isRunning}"
+        val alarm = AlarmLogic.targetAt.takeIf { it > 0 }?.let {
+            "цель " + java.time.Instant.ofEpochMilli(it).toString().substring(11, 16) + "Z"
+        } ?: "будильник выкл"
+        statusView.text = "$grants\n${installInfo()} | log=${NightLogService.isRunning} | $alarm"
     }
 
     private fun installInfo(): String = try {
@@ -277,6 +290,14 @@ class ProbeActivity : ComponentActivity() {
         File(extDir(), "probe_error.txt").readText()
     } catch (_: Throwable) {
         "нет"
+    }
+
+    private fun armNight(hours: Double) {
+        val at = System.currentTimeMillis() + (hours * 3600_000).toLong()
+        AlarmLogic.arm(this, at, 30)
+        append("Цель: ${java.time.Instant.ofEpochMilli(at)} (±30 мин)")
+        if (!NightLogService.isRunning) startLog(NightLogService.MODE_ECO, false)
+        updateStatus()
     }
 
     private fun testAlarmNow() {

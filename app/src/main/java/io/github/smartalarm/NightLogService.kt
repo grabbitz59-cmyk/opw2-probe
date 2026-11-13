@@ -168,6 +168,7 @@ class NightLogService : Service(), SensorEventListener {
 
             handler.post(bucket)
             handler.post(hrOn)
+            AlarmLogic.restoreFromPrefs(this)
             Thread {
                 val r = HealthPassive.start(this)
                 writeRaw("# passive: " + r.replace("\n", " | "))
@@ -345,6 +346,7 @@ class NightLogService : Service(), SensorEventListener {
             SystemClock.elapsedRealtime() / 1000,
         ).joinToString(",")
         writeRaw(line)
+        AlarmLogic.onBucket(this, mv, std, p2p)
         startInForeground("${if (pct >= 0) "$pct%" else "?"} · HR $hb · acc $n")
     }
 
@@ -415,4 +417,8 @@ object Prefs {
     fun path(c: Context) = sp(c).getString("path", "") ?: ""
     fun setNoWake(c: Context, v: Boolean) = sp(c).edit().putBoolean("nowake", v).apply()
     fun noWake(c: Context) = sp(c).getBoolean("nowake", false)
+    fun setAlarmAt(c: Context, v: Long) = sp(c).edit().putLong("alarm_at", v).apply()
+    fun alarmAt(c: Context) = sp(c).getLong("alarm_at", 0L)
+    fun setWindowMin(c: Context, v: Int) = sp(c).edit().putInt("window_min", v).apply()
+    fun windowMin(c: Context) = sp(c).getInt("window_min", 30)
 }
