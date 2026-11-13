@@ -354,7 +354,7 @@ class NightLogService : Service(), SensorEventListener {
             hrSrc, sawAsleep, alarmState,
         ).joinToString(",")
         writeRaw(line)
-        AlarmLogic.onBucket(this, mv, std, p2p)
+        AlarmLogic.onBucket(this, n, mv, std, p2p)
         startInForeground("${if (pct >= 0) "$pct%" else "?"} · HR $hb · acc $n")
     }
 

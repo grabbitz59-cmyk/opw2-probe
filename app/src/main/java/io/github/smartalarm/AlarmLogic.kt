@@ -29,9 +29,12 @@ object AlarmLogic {
     private const val QUIET_FOR_ASLEEP_MS = 20 * 60_000L  // тишина, после которой считаем «уснул»
     private const val MOTION_HOLD_MS = 90_000L            // движение «свежее» в течение 90 с
 
-    private const val MOTION_MOVES = 15                   // «рывков» в бакете
-    private const val MOTION_STD = 0.30                   // std магнитуды, м/с²
-    private const val MOTION_P2P = 3.0                    // peak-to-peak, м/с²
+    // Пороги откалиброваны по реальным данным с OPW2 на спокойной руке:
+    //   moves/n = 0.27–0.8 %, std = 0.21–0.32 м/с², p2p = 3.3–3.5 м/с².
+    // Старые значения (std>0.10, p2p>1.2) давали «движение» почти в каждом бакете.
+    private const val MOTION_MOVES_PCT = 4.0              // доля «рывков» от числа сэмплов, %
+    private const val MOTION_STD = 0.80                   // std магнитуды, м/с²
+    private const val MOTION_P2P = 8.0                    // peak-to-peak, м/с²
 
     @Volatile
     var targetAt: Long = 0
@@ -150,13 +153,13 @@ object AlarmLogic {
 
     // ---------- основной цикл: один бакет сенсоров ----------
 
-    fun onBucket(ctx: Context, moves: Int, std: Double, p2p: Double) {
+    fun onBucket(ctx: Context, n: Int, moves: Int, std: Double, p2p: Double) {
         val now = System.currentTimeMillis()
 
         val fresh = HealthState.freshHr(HR_MAX_AGE_MS)
         if (fresh != null) addSample(now, fresh)
 
-        if (isMotion(moves, std, p2p)) {
+        if (isMotion(n, moves, std, p2p)) {
             synchronized(lock) { lastMotionTs = now }
         }
 
@@ -179,7 +182,7 @@ object AlarmLogic {
         if (t % 10 == 0) {
             log(
                 ctx,
-                "tick hr=$hr base=$base rise=$hrRise moves=$moves std=${fmt(std)} " +
+                "tick hr=$hr base=$base rise=$hrRise n=$n moves=$moves std=${fmt(std)} " +
                     "p2p=${fmt(p2p)} quiet=${quietMinutesNow()}m state=$sysState " +
                     "asleep_seen=$asleepSeen src=${HealthState.sourceNow()}",
             )
@@ -195,8 +198,12 @@ object AlarmLogic {
         }
     }
 
-    private fun isMotion(moves: Int, std: Double, p2p: Double): Boolean =
-        moves >= MOTION_MOVES || std > MOTION_STD || p2p > MOTION_P2P
+    private fun isMotion(n: Int, moves: Int, std: Double, p2p: Double): Boolean {
+        // Нет данных акселерометра — это не признак движения (батчинг может отдать пустое окно).
+        if (n <= 0) return false
+        val movesPct = 100.0 * moves / n
+        return movesPct >= MOTION_MOVES_PCT || std > MOTION_STD || p2p > MOTION_P2P
+    }
 
     /** Возвращает true, если сон уже подтверждён. */
     private fun ensureAsleep(ctx: Context, now: Long): Boolean {
