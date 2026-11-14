@@ -177,7 +177,7 @@ class StatusActivity : ComponentActivity() {
                     (18 * resources.displayMetrics.density).toInt(),
                 ).apply {
                     gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                    bottomMargin = (10 * resources.displayMetrics.density).toInt()
+                    bottomMargin = (26 * resources.displayMetrics.density).toInt()
                 },
             )
         }
