@@ -2,107 +2,127 @@ package io.github.smartalarm
 
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Bundle
-import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.ViewGroup
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.ScrollView
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import java.util.Calendar
+import java.util.Locale
 
+/**
+ * Выбор времени будильника слайдами: часы и минуты тянутся пальцем,
+ * крупное время сверху показывает результат.
+ *
+ * Геометрия — по скиллу wear-os-ui для нашей модели: всё в средней полосе круга,
+ * кнопка 44 dp, ширины считаются через [RoundScreen].
+ */
 class AlarmSetupActivity : ComponentActivity() {
 
     private var hour = 7
     private var minute = 0
-    private var windowMin = 30
 
     private lateinit var timeView: TextView
-    private lateinit var hintView: TextView
-    private var windowBtn: Button? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         hour = Prefs.targetHour(this)
         minute = Prefs.targetMinute(this)
-        windowMin = Prefs.windowMin(this)
         buildUi()
-        refresh()
     }
 
     private fun buildUi() {
-        val scroll = ScrollView(this)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(22), dp(10), dp(22), dp(26))
-        }
+        val root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
+
+        root.addView(label("БУДИЛЬНИК"), at(topPx = 44, heightPx = 22))
 
         timeView = TextView(this).apply {
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            textSize = 26f
+            typeface = Ui.clockTypeface()
+            setTextColor(Ui.text)
+            textSize = 40f
             gravity = Gravity.CENTER
         }
-        root.addView(timeView, lp())
+        root.addView(timeView, at(topPx = 66, heightPx = 90))
 
-        hintView = TextView(this).apply {
-            setTextColor(Color.parseColor("#80CBC4"))
-            textSize = 9f
+        val hourSlider = SliderRowView(this).apply {
+            label = "часы"
+            minValue = 0
+            maxValue = 23
+            step = 1
+            value = hour
+            onChange = { v ->
+                hour = v
+                performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                renderTime()
+            }
+        }
+        root.addView(hourSlider, at(topPx = 168, heightPx = 68, widthCap = 380f))
+
+        val minuteSlider = SliderRowView(this).apply {
+            label = "минуты"
+            minValue = 0
+            maxValue = 55
+            step = 5
+            value = (minute / 5) * 5
+            onChange = { v ->
+                minute = v
+                performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                renderTime()
+            }
+        }
+        root.addView(minuteSlider, at(topPx = 242, heightPx = 68, widthCap = 380f))
+
+        val cta = TextView(this).apply {
+            text = "СОХРАНИТЬ И СПАТЬ"
+            textSize = 12f
+            typeface = Ui.labelTypeface()
+            letterSpacing = 0.05f
             gravity = Gravity.CENTER
-            setPadding(0, 0, 0, dp(4))
-            setOnClickListener { cycleWindow() }
+            setTextColor(Color.parseColor("#04211D"))
+            setBackgroundResource(R.drawable.bg_cta)
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                saveAndSleep()
+            }
         }
-        root.addView(hintView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ))
+        root.addView(cta, at(topPx = 322, heightPx = 88, widthCap = 216f))
 
-        row(root, "−1ч" to { shift(-60) }, "+1ч" to { shift(60) })
-        row(root, "−5м" to { shift(-5) }, "+5м" to { shift(5) })
-
-        val wb = wide(root, "Окно: ${windowMin} мин") { cycleWindow() }
-        windowBtn = wb
-
-        wide(root, "СОХРАНИТЬ И СПАТЬ") { saveAndSleep() }
-
-
-        scroll.addView(root)
-        setContentView(scroll)
+        setContentView(root)
+        renderTime()
     }
 
-    private fun cycleWindow() {
-        windowMin = when (windowMin) {
-            15 -> 30
-            30 -> 45
-            45 -> 60
-            else -> 15
-        }
-        refresh()
+    private fun label(text: String): TextView = TextView(this).apply {
+        this.text = text
+        textSize = 9f
+        letterSpacing = 0.18f
+        typeface = Ui.labelTypeface()
+        setTextColor(Ui.accent)
+        gravity = Gravity.CENTER
     }
 
-    private fun shift(deltaMinutes: Int) {
-        val total = ((hour * 60 + minute + deltaMinutes) % 1440 + 1440) % 1440
-        hour = total / 60
-        minute = total % 60
-        refresh()
+    /** Абсолютная позиция + ширина, урезанная по кругу (R1–R2). */
+    private fun at(topPx: Int, heightPx: Int, widthCap: Float? = null): FrameLayout.LayoutParams {
+        val lp = FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, heightPx,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            topMargin = topPx
+        }
+        val safe = RoundScreen.safeRowWidth(topPx.toFloat(), (topPx + heightPx).toFloat())
+        lp.width = when {
+            safe <= 0f && widthCap == null -> ViewGroup.LayoutParams.MATCH_PARENT
+            safe <= 0f -> widthCap!!.toInt()
+            widthCap != null -> minOf(widthCap, safe).toInt()
+            else -> safe.toInt()
+        }
+        return lp
     }
 
-    private fun refresh() {
-        timeView.text = String.format(java.util.Locale.US, "%02d:%02d", hour, minute)
-        val at = targetEpoch()
-        val cal = Calendar.getInstance().apply { timeInMillis = at }
-        val now = Calendar.getInstance()
-        val tomorrow = cal.get(Calendar.DAY_OF_YEAR) != now.get(Calendar.DAY_OF_YEAR)
-        val diffMin = ((at - now.timeInMillis) / 60000).toInt()
-        windowBtn?.text = "Окно: $windowMin мин"
-        hintView.text = buildString {
-            append(if (tomorrow) "завтра" else "сегодня")
-            append(" через ${diffMin / 60}ч ${diffMin % 60}м")
-        }
+    private fun renderTime() {
+        timeView.text = String.format(Locale.US, "%02d:%02d", hour, minute)
     }
 
     private fun targetEpoch(): Long {
@@ -112,9 +132,7 @@ class AlarmSetupActivity : ComponentActivity() {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        if (cal.timeInMillis <= System.currentTimeMillis() + 60_000) {
-            cal.add(Calendar.DAY_OF_YEAR, 1)
-        }
+        if (cal.timeInMillis <= System.currentTimeMillis() + 60_000) cal.add(Calendar.DAY_OF_YEAR, 1)
         return cal.timeInMillis
     }
 
@@ -122,59 +140,21 @@ class AlarmSetupActivity : ComponentActivity() {
         val at = targetEpoch()
         Prefs.setTargetHour(this, hour)
         Prefs.setTargetMinute(this, minute)
-        Prefs.setWindowMin(this, windowMin)
-        AlarmLogic.arm(this, at, windowMin)
-        AlarmLogic.log(this, "UI arm ${String.format(java.util.Locale.US, "%02d:%02d", hour, minute)} window=$windowMin")
-
+        AlarmLogic.arm(this, at, Prefs.windowMin(this))
+        AlarmLogic.log(
+            this,
+            "setup arm ${String.format(Locale.US, "%02d:%02d", hour, minute)} " +
+                "w=${Prefs.windowMin(this)}",
+        )
         val svc = Intent(this, NightLogService::class.java).apply {
             action = NightLogService.ACTION_START
             putExtra(NightLogService.EXTRA_MODE, NightLogService.MODE_ECO)
             putExtra(NightLogService.EXTRA_NOWAKELOCK, false)
         }
-        ContextCompat.startForegroundService(this, svc)
-        UiLog.add("Ночь: цель ${String.format(java.util.Locale.US, "%02d:%02d", hour, minute)} ±$windowMin мин, лог запущен")
+        try {
+            ContextCompat.startForegroundService(this, svc)
+        } catch (_: Throwable) {
+        }
         finish()
     }
-
-    private fun row(parent: LinearLayout, left: Pair<String, () -> Unit>, right: Pair<String, () -> Unit>) {
-        val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        r.addView(smallBtn(left.first, left.second), LinearLayout.LayoutParams(0, dp(36), 1f).apply { rightMargin = dp(4) })
-        r.addView(smallBtn(right.first, right.second), LinearLayout.LayoutParams(0, dp(36), 1f).apply { leftMargin = dp(4) })
-        parent.addView(r, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply { bottomMargin = dp(5) })
-    }
-
-    private fun smallBtn(label: String, onClick: () -> Unit): Button = Button(this).apply {
-        text = label
-        textSize = 13f
-        isAllCaps = false
-        minimumHeight = 0
-        minHeight = 0
-        setPadding(0, 0, 0, 0)
-        setOnClickListener { onClick() }
-    }
-
-    private fun wide(parent: LinearLayout, label: String, onClick: () -> Unit): Button {
-        val b = Button(this).apply {
-            text = label
-            textSize = 11f
-            isAllCaps = false
-            minimumHeight = 0
-            minHeight = 0
-            setOnClickListener { onClick() }
-        }
-        parent.addView(b, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(38)
-        ).apply { bottomMargin = dp(4) })
-        return b
-    }
-
-    private fun lp() = LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-    )
-
-    private fun dp(v: Int): Int = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics
-    ).toInt()
 }

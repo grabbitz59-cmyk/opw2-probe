@@ -16,8 +16,8 @@ android {
         applicationId = "io.github.smartalarm"
         minSdk = 30
         targetSdk = 34
-        versionCode = 30
-        versionName = "1.20-opw2"
+        versionCode = 31
+        versionName = "1.21-timepicker"
     }
 
     signingConfigs {
