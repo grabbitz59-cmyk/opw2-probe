@@ -38,6 +38,15 @@ class SwipeWrapLayout @JvmOverloads constructor(
 
     private fun edgeGuardPx(): Float = 70f
 
+    /**
+     * Игнорируем просьбы детей «не перехватывать»: внутренний `ScrollView` на экране
+     * истории иначе забирает горизонтальный жест целиком, и листание не работает.
+     * Вертикальные жесты это не ломает — мы перехватываем только при |dx| > 1.4·|dy|.
+     */
+    override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
+        super.requestDisallowInterceptTouchEvent(false)
+    }
+
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
