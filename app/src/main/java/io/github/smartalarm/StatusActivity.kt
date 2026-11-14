@@ -139,6 +139,8 @@ class StatusActivity : ComponentActivity() {
         )
         addInfo(root, "Отложить", "${Prefs.snoozeMin(this)} мин")
         addInfo(root, "Ночной лог", if (NightLogService.isRunning) "идёт" else "остановлен")
+        val lastWake = Prefs.lastWakePhase(this)
+        if (lastWake.isNotEmpty()) addInfo(root, "Последний подъём", lastWake)
         addInfo(root, "Батарея", if (battery in 0..100) "$battery%" else "н/д")
         addInfo(
             root, "Разрешения",

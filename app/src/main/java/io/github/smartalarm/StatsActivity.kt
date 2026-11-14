@@ -266,7 +266,13 @@ class StatsActivity : ComponentActivity() {
         sb.appendLine("Батарея: $battery" + if (n.alarmFired) " · будильник сработал" else "")
         summaryView.text = sb.toString().trim()
 
+        // Фаза, в которой разбудил будильник (по HR + движению в этот момент)
         phasesView.text = buildString {
+            if (n.wakePhase != SleepStats.Stage.UNKNOWN) {
+                append("Разбудил в фазе: ").append(PhaseEstimator.label(n.wakePhase))
+                if (n.wakeHr > 0) append(" · пульс ").append(n.wakeHr)
+                append("\n")
+            }
             append("≈ глубокий ").append(hm(n.deepMin))
             append(" · лёгкий ").append(hm(n.lightMin))
             append(" · бодрств. ").append(hm(n.awakeMin))

@@ -49,7 +49,7 @@ class NightLogService : Service(), SensorEventListener {
         private const val HR_OFF_FULL_MS = 20_000L
         private const val GRAVITY = 9.80665
         private const val CSV_HEADER =
-            "ts,epoch_ms,mode,battery_pct,charging,batt_temp_c,screen_on,doze,hr_bpm,hr_age_s,acc_n,acc_mean,acc_std,acc_p2p,moves,hr_samples,uptime_s,hr_source,saw_asleep,alarm_state"
+            "ts,epoch_ms,mode,battery_pct,charging,batt_temp_c,screen_on,doze,hr_bpm,hr_age_s,acc_n,acc_mean,acc_std,acc_p2p,moves,hr_samples,uptime_s,hr_source,saw_asleep,alarm_state,wake_phase"
 
         @Volatile var isRunning = false
         @Volatile var currentPath: String = ""
@@ -423,7 +423,7 @@ class NightLogService : Service(), SensorEventListener {
             iso, now, mode, pct, charging, tempC, screenOn, doze,
             hb, hAge, n, fmt(mean), fmt(std), fmt(p2p), mv, hrs,
             SystemClock.elapsedRealtime() / 1000,
-            hrSrc, sawAsleep, alarmState,
+            hrSrc, sawAsleep, alarmState, AlarmLogic.wakePhaseCode(),
         ).joinToString(",")
         writeRaw(line)
         AlarmLogic.onBucket(this, n, mv, std, p2p)
@@ -512,6 +512,8 @@ object Prefs {
     fun repeatDays(c: Context) = sp(c).getInt("repeat_days", 0)
     fun setSnoozeMin(c: Context, v: Int) = sp(c).edit().putInt("snooze_min", v).apply()
     fun snoozeMin(c: Context) = sp(c).getInt("snooze_min", 5)
+    fun setLastWakePhase(c: Context, v: String) = sp(c).edit().putString("last_wake_phase", v).apply()
+    fun lastWakePhase(c: Context) = sp(c).getString("last_wake_phase", "") ?: ""
     fun setTargetHour(c: Context, v: Int) = sp(c).edit().putInt("target_h", v).apply()
     fun targetHour(c: Context) = sp(c).getInt("target_h", 7)
     fun setTargetMinute(c: Context, v: Int) = sp(c).edit().putInt("target_m", v).apply()

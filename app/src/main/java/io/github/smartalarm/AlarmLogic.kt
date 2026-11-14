@@ -63,6 +63,41 @@ object AlarmLogic {
         }
     }
 
+    // ---------- фаза сна в момент подъёма ----------
+
+    @Volatile
+    private var wakePhaseStage: SleepStats.Stage = SleepStats.Stage.UNKNOWN
+
+    /** Код фазы для CSV-колонки `wake_phase`. */
+    fun wakePhaseCode(): String = PhaseEstimator.code(wakePhaseStage)
+
+    /** Человеческое название фазы для экрана истории. */
+    fun wakePhaseLabel(): String = PhaseEstimator.label(wakePhaseStage)
+
+    /** Оценить текущую фазу по последнему пульсу, ночной медиане и недавнему движению. */
+    private fun currentPhase(now: Long): SleepStats.Stage {
+        val median = baseline(now)
+        val hr = synchronized(lock) { lastHrValue }
+        val motionRecent = (now - synchronized(lock) { lastMotionTs }) <= PhaseEstimator.MOTION_RECENT_MS
+        return PhaseEstimator.estimate(hr, median, motionRecent)
+    }
+
+    /** Зафиксировать фазу, в которой человек проснулся (вызывается при срабатывании). */
+    fun recordWakePhase(ctx: Context, reason: String): SleepStats.Stage {
+        val now = System.currentTimeMillis()
+        val stage = currentPhase(now)
+        wakePhaseStage = stage
+        Prefs.setLastWakePhase(ctx, PhaseEstimator.label(stage))
+        log(ctx, "wake phase recorded: ${PhaseEstimator.label(stage)} ($reason)")
+        return stage
+    }
+
+    /** Фаза, в которой был человек, когда выключил будильник. */
+    fun recordStopPhase(ctx: Context) {
+        val stage = currentPhase(System.currentTimeMillis())
+        log(ctx, "stop phase: ${PhaseEstimator.label(stage)}")
+    }
+
     // ---------- снимки состояния для CSV и UI ----------
 
     fun sawAsleepNow(): Boolean = synchronized(lock) { sawAsleep }
@@ -308,11 +343,25 @@ object AlarmLogic {
     // ---------- срабатывание ----------
 
     private fun trigger(ctx: Context, reason: String) {
+        val now = System.currentTimeMillis()
+        val stage = currentPhase(now)
+
+        // Умное окно: не поднимаем из глубокого сна, пока внутри окна есть запас.
+        // Это и есть практический смысл «фазы»: будим в лёгкой/бодрствовании.
+        if (stage == SleepStats.Stage.DEEP && windowMs >= 10 * 60_000L &&
+            now < targetAt - 5 * 60_000L
+        ) {
+            log(ctx, "postpone: deep sleep, ${(targetAt - now) / 60_000} min left in window")
+            return
+        }
+
         val go = synchronized(lock) {
             if (triggered) false else { triggered = true; lastTriggerReason = reason; true }
         }
         if (!go) return
-        log(ctx, "TRIGGER $reason")
+        wakePhaseStage = stage
+        Prefs.setLastWakePhase(ctx, PhaseEstimator.label(stage))
+        log(ctx, "TRIGGER $reason phase=${PhaseEstimator.label(stage)}")
         try {
             ctx.sendBroadcast(Intent(ctx, AlarmTestReceiver::class.java))
         } catch (t: Throwable) {

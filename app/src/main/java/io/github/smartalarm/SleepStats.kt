@@ -29,6 +29,7 @@ object SleepStats {
         val p2p: Double,
         val asleep: Boolean,
         val alarmState: String,
+        val wakePhase: String,
     )
 
     data class Night(
@@ -46,6 +47,8 @@ object SleepStats {
         val batteryStart: Int,
         val batteryEnd: Int,
         val alarmFired: Boolean,
+        val wakePhase: Stage,
+        val wakeHr: Int,
         val series: List<Row>,
         // Новые показатели
         val stages: List<Stage>,
@@ -76,6 +79,7 @@ object SleepStats {
                 p2p = c[13].toDouble(),
                 asleep = c.size > 18 && c[18].equals("true", ignoreCase = true),
                 alarmState = if (c.size > 19) c[19] else "",
+                wakePhase = if (c.size > 20) c[20] else "",
             )
         } catch (_: Throwable) {
             null
@@ -159,6 +163,9 @@ object SleepStats {
             batteryStart = firstPct,
             batteryEnd = lastPct,
             alarmFired = rows.any { it.alarmState == "triggered" },
+            wakePhase = rows.firstOrNull { it.alarmState == "triggered" }
+                ?.let { PhaseEstimator.fromCode(it.wakePhase) } ?: Stage.UNKNOWN,
+            wakeHr = rows.firstOrNull { it.alarmState == "triggered" }?.hr ?: -1,
             series = rows,
             stages = stages,
             deepMin = deepMin,
