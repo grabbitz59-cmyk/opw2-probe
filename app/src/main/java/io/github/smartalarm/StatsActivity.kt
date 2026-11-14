@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -50,6 +51,57 @@ class StatsActivity : ComponentActivity() {
     }
 
     // ---------- циклическая прокрутка (R11–R13) ----------
+    private var swipeDownX = 0f
+    private var swipeDownY = 0f
+    private var dragging = false
+
+    /**
+     * Листание по кругу: главный --влево--> история --влево--> главный --влево--> …
+     * Горизонталь ловим только когда она заметно больше вертикали, поэтому
+     * вертикальная прокрутка текста продолжает работать.
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                swipeDownX = ev.x
+                swipeDownY = ev.y
+                dragging = false
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                val dx = ev.x - swipeDownX
+                val dy = ev.y - swipeDownY
+                if (!dragging && swipeDownX > 70f &&
+                    kotlin.math.abs(dx) > 24f && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f
+                ) {
+                    dragging = true
+                }
+                if (dragging && ::contentView.isInitialized) {
+                    contentView.translationX = dx
+                    contentView.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
+                    return true
+                }
+            }
+
+            MotionEvent.ACTION_UP -> {
+                if (dragging) {
+                    dragging = false
+                    commitSwipe(ev.x - swipeDownX)
+                    return true
+                }
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                if (dragging) {
+                    dragging = false
+                    revert()
+                    return true
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     private fun commitSwipe(dx: Float) {
         if (kotlin.math.abs(dx) < 90f) {
             revert()
