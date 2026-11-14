@@ -135,7 +135,8 @@ class HomeActivity : ComponentActivity() {
         dial = DialView(this).apply {
             setOnClickListener { openSetup() }
             setOnLongClickListener {
-                pager.showPage(1)
+                startActivity(Intent(this@HomeActivity, StatsActivity::class.java))
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
                 true
             }
         }
@@ -190,14 +191,36 @@ class HomeActivity : ComponentActivity() {
         }
         root.addView(cta, overlay(topPx = 314, heightPx = 88))
 
-        // Карусель разделов: влево — следующая страница, после последней снова первая
-        val statsPage = StatsPageView(this)
-        pager = CyclePager(this)
-        pager.addPage(root)
-        pager.addPage(statsPage)
-        pager.onPageChanged = { idx -> if (idx == 1) statsPage.reload() }
-        setContentView(pager)
+        // Листание разделов: свайп влево открывает историю ночи (системный «назад» — возврат).
+        // Кастомная карусель (CyclePager) оказалась нестабильной на устройстве и оставлена
+        // в проекте как заготовка; включим её только вместе с полноценным пейджером.
+        setContentView(root)
         root.post { applyGeometry(root) }
+    }
+
+    // ---------- листание разделов (R11–R12) ----------
+    private var swipeDownX = 0f
+    private var swipeDownY = 0f
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                swipeDownX = ev.x
+                swipeDownY = ev.y
+            }
+
+            MotionEvent.ACTION_UP -> {
+                val dx = ev.x - swipeDownX
+                val dy = ev.y - swipeDownY
+                // Только из центральной зоны: у левого края жест принадлежит системе.
+                if (swipeDownX > 90f && dx <= -90f && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f) {
+                    startActivity(Intent(this, StatsActivity::class.java))
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+                    return true
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun overlay(topPx: Int, heightPx: Int): FrameLayout.LayoutParams =
