@@ -5,7 +5,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-
 /**
  * Проверка правил скилла wear-os-ui на геометрии нашего экрана (466×466, круг).
  * Тесты стерегут именно те ошибки, что уже были: полноширинные кнопки у нижнего края.
@@ -18,9 +17,9 @@ class RoundScreenTest {
 
     @Test
     fun `safe width is maximal in the middle of the screen`() {
+        // 2 * sqrt(209^2 - 13^2) ≈ 417
         val middle = RoundScreen.safeRowWidth(220f, 246f, w, h, margin)
-        // 2 * (233 - 24) = 418
-        assertEquals(418f, middle, 1f)
+        assertEquals(417f, middle, 1.5f)
     }
 
     @Test
@@ -28,7 +27,7 @@ class RoundScreenTest {
         val top = RoundScreen.safeRowWidth(40f, 104f, w, h, margin)
         val bottom = RoundScreen.safeRowWidth(362f, 426f, w, h, margin)
         assertTrue("у краёв уже, чем в центре", top < 300f && bottom < 300f)
-        assertTrue(top > 0f && bottom > 0f)
+        assertTrue(top > 100f && bottom > 100f)
     }
 
     @Test
@@ -44,16 +43,28 @@ class RoundScreenTest {
     }
 
     @Test
-    fun `planned rows fit inside the circle`() {
-        // Чипсы окна: y 300..364, ширина 380
-        assertTrue("чипсы окна", RoundScreen.fits(43f, 300f, 423f, 364f, w, h, margin))
-        // Основная кнопка: y 372..460 — у нижнего края, ширина 200
-        assertTrue("CTA", RoundScreen.fits(133f, 372f, 333f, 460f, w, h, margin))
+    fun `status row fits`() {
+        // y 216..242, ширина 416 (x 25..441)
+        assertTrue(RoundScreen.fits(25f, 216f, 441f, 242f, w, h, margin))
     }
 
     @Test
-    fun `full-width row in the middle is allowed`() {
-        assertTrue(RoundScreen.fits(24f, 210f, 442f, 256f, w, h, margin))
+    fun `window pill fits`() {
+        // y 250..306, ширина 340 (x 63..403)
+        assertTrue(RoundScreen.fits(63f, 250f, 403f, 306f, w, h, margin))
+    }
+
+    @Test
+    fun `primary action fits`() {
+        // y 314..402, ширина 240 (x 113..353)
+        assertTrue(RoundScreen.fits(113f, 314f, 353f, 402f, w, h, margin))
+    }
+
+    @Test
+    fun `wide row must stay in the middle band`() {
+        assertTrue(RoundScreen.fits(30f, 210f, 436f, 256f, w, h, margin))
+        // та же ширина, но ниже — уже не влезает
+        assertFalse(RoundScreen.fits(30f, 380f, 436f, 426f, w, h, margin))
     }
 
     @Test
