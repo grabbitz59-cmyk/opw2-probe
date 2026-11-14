@@ -90,7 +90,13 @@ object AlarmLogic {
 
     // ---------- взвод / снятие ----------
 
-    fun arm(ctx: Context, targetAtMs: Long, windowMin: Int) {
+    /**
+     * Взвести будильник.
+     *
+     * @param persistWindow писать ли окно в настройки. Для snooze окно равно нулю
+     *   (никакой «умной» зоны), но пользовательскую настройку ±N затирать нельзя.
+     */
+    fun arm(ctx: Context, targetAtMs: Long, windowMin: Int, persistWindow: Boolean = true) {
         synchronized(lock) {
             targetAt = targetAtMs
             windowMs = windowMin * 60_000L
@@ -104,7 +110,7 @@ object AlarmLogic {
             lastTriggerReason = ""
         }
         Prefs.setAlarmAt(ctx, targetAtMs)
-        Prefs.setWindowMin(ctx, windowMin)
+        if (persistWindow) Prefs.setWindowMin(ctx, windowMin)
         scheduleFallback(ctx, targetAtMs)
         log(ctx, "arm target=${Instant.ofEpochMilli(targetAtMs)} window=${windowMin}m")
     }
