@@ -148,12 +148,19 @@ class HomeActivity : ComponentActivity() {
 
         val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         bottom.addView(
-            small("Тест 2 мин") { testAlarm() },
+            small("Ночь") {
+                startActivity(Intent(this@HomeActivity, StatsActivity::class.java))
+            },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginEnd = dp(4) },
+                .apply { marginEnd = dp(3) },
         )
         bottom.addView(
-            small("Диагностика") {
+            small("Тест") { testAlarm() },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginEnd = dp(3) },
+        )
+        bottom.addView(
+            small("Диагн.") {
                 startActivity(Intent(this@HomeActivity, ProbeActivity::class.java))
             },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),

@@ -41,6 +41,13 @@
             </intent-filter>
         </activity>
 
+        <!-- Прошлая ночь: график пульса/движения и сводка -->
+        <activity
+            android:name=".StatsActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
         <!-- Диагностическая консоль: осталась доступной, но не в лончере -->
         <activity
             android:name=".ProbeActivity"
