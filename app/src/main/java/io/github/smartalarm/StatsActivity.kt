@@ -40,6 +40,31 @@ class StatsActivity : ComponentActivity() {
         load()
     }
 
+    // ---------- свайп: возврат на главный экран (R11) ----------
+    private var swipeDownX = 0f
+    private var swipeDownY = 0f
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                swipeDownX = ev.x
+                swipeDownY = ev.y
+            }
+            MotionEvent.ACTION_UP -> {
+                val dx = ev.x - swipeDownX
+                val dy = ev.y - swipeDownY
+                if (swipeDownX > 70f && kotlin.math.abs(dx) >= 90f &&
+                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f
+                ) {
+                    finish()
+                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                    return true
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
