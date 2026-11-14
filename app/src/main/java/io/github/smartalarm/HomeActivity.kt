@@ -189,7 +189,18 @@ class HomeActivity : ComponentActivity() {
         }
         root.addView(cta, overlay(topPx = 314, heightPx = 88))
 
-        setContentView(root)
+        // Циклическая прокрутка (R11–R13) через контейнер-перехватчик
+        val wrap = SwipeWrapLayout(this)
+        wrap.addView(root)
+        wrap.onDrag = { dx ->
+            rootFrame.translationX = dx
+            rootFrame.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
+        }
+        wrap.onCommit = { dx ->
+            if (kotlin.math.abs(dx) >= 90f) openStatsWithSlide(dx < 0) else snapBack()
+        }
+        wrap.onCancel = { snapBack() }
+        setContentView(wrap)
         root.post { applyGeometry(root) }
     }
 
@@ -214,56 +225,6 @@ class HomeActivity : ComponentActivity() {
         cap(cta, 240f)
     }
 
-
-    // ---------- циклическая прокрутка экранов (R11–R13) ----------
-    private var swipeDownX = 0f
-    private var swipeDownY = 0f
-    private var dragging = false
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                swipeDownX = ev.x
-                swipeDownY = ev.y
-                dragging = false
-            }
-
-            MotionEvent.ACTION_MOVE -> {
-                val dx = ev.x - swipeDownX
-                val dy = ev.y - swipeDownY
-                // Тянем из любой стороны, кроме системной зоны «назад» у левого края.
-                if (!dragging && swipeDownX > 70f && kotlin.math.abs(dx) > 24f &&
-                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f
-                ) {
-                    dragging = true
-                }
-                if (dragging) {
-                    rootFrame.translationX = dx
-                    rootFrame.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
-                    return true
-                }
-            }
-
-            MotionEvent.ACTION_UP -> {
-                if (dragging) {
-                    val dx = ev.x - swipeDownX
-                    dragging = false
-                    if (kotlin.math.abs(dx) >= 90f) openStatsWithSlide(dx < 0) else snapBack()
-                    return true
-                }
-            }
-
-            MotionEvent.ACTION_CANCEL -> {
-                // Жест отменён системой — экран возвращаем на место, никуда не уходим
-                if (dragging) {
-                    dragging = false
-                    snapBack()
-                    return true
-                }
-            }
-        }
-        return super.dispatchTouchEvent(ev)
-    }
 
     private fun snapBack() {
         rootFrame.animate().translationX(0f).alpha(1f).setDuration(160L).start()

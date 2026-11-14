@@ -51,75 +51,6 @@ class StatsActivity : ComponentActivity() {
         }
     }
 
-    // ---------- циклическая прокрутка: тянем за палец в любую сторону (R11–R13) ----------
-    private var swipeDownX = 0f
-    private var swipeDownY = 0f
-    private var dragging = false
-    private lateinit var contentView: android.widget.LinearLayout
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                swipeDownX = ev.x
-                swipeDownY = ev.y
-                dragging = false
-            }
-
-            MotionEvent.ACTION_MOVE -> {
-                val dx = ev.x - swipeDownX
-                val dy = ev.y - swipeDownY
-                if (!dragging && swipeDownX > 70f && kotlin.math.abs(dx) > 24f &&
-                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f
-                ) {
-                    dragging = true
-                }
-                if (dragging) {
-                    contentView.translationX = dx
-                    contentView.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
-                    return true
-                }
-            }
-
-            MotionEvent.ACTION_UP -> {
-                if (dragging) {
-                    val dx = ev.x - swipeDownX
-                    dragging = false
-                    if (kotlin.math.abs(dx) >= 90f) {
-                        val toLeft = dx < 0
-                        contentView.animate()
-                            .translationX(if (toLeft) -screenW else screenW)
-                            .alpha(0.35f)
-                            .setDuration(140L)
-                            .withEndAction {
-                                finish()
-                                // Циклически: следующий экран приходит с той стороны,
-                                // куда мы листаем — без «обратного» свайпа.
-                                if (toLeft) {
-                                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
-                                } else {
-                                    overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
-                                }
-                            }
-                            .start()
-                    } else {
-                        contentView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
-                    }
-                    return true
-                }
-            }
-
-            MotionEvent.ACTION_CANCEL -> {
-                // Отмена жеста — возвращаем контент на место, экран не закрываем
-                if (dragging) {
-                    dragging = false
-                    contentView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
-                    return true
-                }
-            }
-        }
-        return super.dispatchTouchEvent(ev)
-    }
-
     private fun buildUi() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -188,8 +119,42 @@ class StatsActivity : ComponentActivity() {
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
-        contentView = outer
-        setContentView(outer)
+        co    // ---------- циклическая прокрутка (R11–R13) ----------
+    private fun commitSwipe(dx: Float) {
+        if (kotlin.math.abs(dx) < 90f) {
+            revert()
+            return
+        }
+        val toLeft = dx < 0
+        contentView.animate()
+            .translationX(if (toLeft) -screenW else screenW)
+            .alpha(0.35f)
+            .setDuration(140L)
+            .withEndAction {
+                finish()
+                if (toLeft) {
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+                } else {
+                    overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+                }
+            }
+            .start()
+    }
+
+    private fun revert() {
+        contentView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
+    }
+ntentView = outer
+        // Циклическая прокрутка (R11–R13): жест ловит контейнер, а не Activity
+        val wrap = SwipeWrapLayout(this)
+        wrap.addView(outer)
+        wrap.onDrag = { dx ->
+            contentView.translationX = dx
+            contentView.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
+        }
+        wrap.onCommit = { dx -> commitSwipe(dx) }
+        wrap.onCancel = { revert() }
+        setContentView(wrap)
     }
 
     private fun load() {
