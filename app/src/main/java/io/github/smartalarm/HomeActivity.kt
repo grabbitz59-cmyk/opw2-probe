@@ -191,18 +191,38 @@ class HomeActivity : ComponentActivity() {
         }
         root.addView(cta, overlay(topPx = 314, heightPx = 88))
 
-        // Бесконечная карусель разделов: влево листает дальше, после последней — снова первая.
-        // Обе страницы всегда видимы, двигаются только по x (GONE ломал доставку касаний).
-        val statsPage = StatsPageView(this)
-        pager = CarouselPager(this)
-        pager.addPage(root)
-        pager.addPage(statsPage)
-        pager.onPageChanged = { idx -> if (idx == 1) statsPage.reload() }
-        setContentView(pager)
+        // Листание разделов: свайп влево открывает историю ночи (стабильный проверенный путь).
+        // Карусель (CarouselPager) оставлена в проекте, но выключена: после первого перехода
+        // пейджер перестаёт получать жесты (см. трассировку carousel в alarm_debug.txt).
+        // Следующий заход — на ViewPager2, где доставка касаний решена платформой.
+        setContentView(root)
         root.post { applyGeometry(root) }
     }
 
-    /** Открыть историю ночи отдельным экраном (запасной путь, если карусель недоступна). */
+    // ---------- листание разделов (R11–R12) ----------
+    private var swipeDownX = 0f
+    private var swipeDownY = 0f
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                swipeDownX = ev.x
+                swipeDownY = ev.y
+            }
+
+            MotionEvent.ACTION_UP -> {
+                val dx = ev.x - swipeDownX
+                val dy = ev.y - swipeDownY
+                if (swipeDownX > 90f && dx <= -90f && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f) {
+                    openStats()
+                    return true
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** Открыть историю ночи отдельным экраном. */
     private fun openStats() {
         startActivity(Intent(this, StatsActivity::class.java))
         overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
