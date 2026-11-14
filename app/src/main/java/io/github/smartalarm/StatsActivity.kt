@@ -1,5 +1,6 @@
 package io.github.smartalarm
 
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -113,10 +114,12 @@ class StatsActivity : ComponentActivity() {
             .alpha(0.35f)
             .setDuration(140L)
             .withEndAction {
-                finish()
+                // Листаем только влево и дальше по кругу: ночь → статус
                 if (toLeft) {
+                    startActivity(Intent(this, StatusActivity::class.java))
                     overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
                 } else {
+                    finish()
                     overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
                 }
             }
