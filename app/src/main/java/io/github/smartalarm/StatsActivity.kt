@@ -7,7 +7,6 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import java.io.File
@@ -89,11 +88,11 @@ class StatsActivity : ComponentActivity() {
         chart = SleepChartView(this).apply { setBackgroundResource(R.drawable.bg_card) }
         root.addView(
             chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(72))
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54))
                 .apply { topMargin = dp(3) },
         )
 
-        summaryView = text("загружаю…", 9f, Ui.TEXT_SECONDARY).apply {
+        summaryView = text("загружаю…", 8f, Ui.TEXT_SECONDARY).apply {
             gravity = Gravity.START
             setPadding(dp(2), dp(4), dp(2), 0)
             setLineSpacing(dp(1).toFloat(), 1f)
@@ -102,7 +101,7 @@ class StatsActivity : ComponentActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        phasesView = text("", 9f, Ui.ACCENT).apply {
+        phasesView = text("", 8f, Ui.ACCENT).apply {
             gravity = Gravity.START
             setPadding(dp(2), dp(3), dp(2), 0)
         }
@@ -110,7 +109,7 @@ class StatsActivity : ComponentActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        efficiencyView = text("", 9f, Ui.TEXT_SECONDARY).apply {
+        efficiencyView = text("", 8f, Ui.TEXT_SECONDARY).apply {
             gravity = Gravity.START
             setPadding(dp(2), dp(1), dp(2), 0)
         }
@@ -126,24 +125,19 @@ class StatsActivity : ComponentActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        // Контент ограничен вписанным квадратом нашей модели (R1–R2)
+        // Контент ограничен вписанным квадратом нашей модели (R1–R2).
+        // ScrollView здесь НЕ используется сознательно: он перехватывает горизонтальный
+        // жест, и листание на историю не работает (проверено на устройстве).
         val inset = RoundScreen.inscribedInsetPx() + dp(10)
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Ui.bg)
-            setPadding(inset, dp(44), inset, dp(18))
+            setPadding(inset, dp(20), inset, dp(14))
+            addView(root)
         }
-        outer.addView(
-            ScrollView(this).apply {
-                isFillViewport = true
-                setBackgroundColor(Ui.bg)
-                addView(root)
-            },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
-        )
 
         contentView = outer
-        // Жест ловит контейнер: иначе ScrollView съедает горизонтальный drag
+        // Жест ловит контейнер: иначе внутренние вью съедают горизонтальный drag
         val wrap = SwipeWrapLayout(this)
         wrap.addView(outer)
         wrap.onDrag = { dx ->
@@ -198,7 +192,6 @@ class StatsActivity : ComponentActivity() {
             "${durationMin / 60}ч ${durationMin % 60}м · окон ${n.rows}")
         sb.appendLine(hrLine + " · окна с пульсом ${hrCov.toInt()}%")
         sb.appendLine("Пробуждений: ${n.awakenings} · движение ${n.motionPct.toInt()}% окон")
-        sb.appendLine("Сон подтверждён: ${n.asleepPct.toInt()}% окон")
         sb.appendLine("Батарея: $battery" + if (n.alarmFired) " · будильник сработал" else "")
         summaryView.text = sb.toString().trim()
 
