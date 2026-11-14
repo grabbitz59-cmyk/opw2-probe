@@ -37,6 +37,7 @@ class HomeActivity : ComponentActivity() {
     private lateinit var windowPill: TextView
     private lateinit var cta: TextView
     private lateinit var rootFrame: FrameLayout
+    private lateinit var pager: CarouselPager
     private var ambient: AmbientLifecycleObserver? = null
 
     private var hour = 7
@@ -134,8 +135,7 @@ class HomeActivity : ComponentActivity() {
         dial = DialView(this).apply {
             setOnClickListener { openSetup() }
             setOnLongClickListener {
-                startActivity(Intent(this@HomeActivity, StatsActivity::class.java))
-                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+                pager.showPage(1)
                 true
             }
         }
@@ -190,35 +190,15 @@ class HomeActivity : ComponentActivity() {
         }
         root.addView(cta, overlay(topPx = 314, heightPx = 88))
 
-        // Листание разделов: свайп влево открывает историю ночи.
-        // Бесконечная карусель (CarouselPager) отложена: на устройстве переключается только
-        // первая страница, дальше жесты до пейджера не доходят (см. трассировку в логе).
-        setContentView(root)
+        // Бесконечная карусель разделов: свайп влево листает дальше, после последней — снова первая.
+        // Обе страницы всегда видимы, двигаются только по x (это важно: GONE ломал касания).
+        val statsPage = StatsPageView(this)
+        pager = CarouselPager(this)
+        pager.addPage(root)
+        pager.addPage(statsPage)
+        pager.onPageChanged = { idx -> if (idx == 1) statsPage.reload() }
+        setContentView(pager)
         root.post { applyGeometry(root) }
-    }
-
-    // ---------- листание разделов (R11–R12) ----------
-    private var swipeDownX = 0f
-    private var swipeDownY = 0f
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                swipeDownX = ev.x
-                swipeDownY = ev.y
-            }
-
-            MotionEvent.ACTION_UP -> {
-                val dx = ev.x - swipeDownX
-                val dy = ev.y - swipeDownY
-                if (swipeDownX > 90f && dx <= -90f && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f) {
-                    startActivity(Intent(this, StatsActivity::class.java))
-                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
-                    return true
-                }
-            }
-        }
-        return super.dispatchTouchEvent(ev)
     }
 
     private fun overlay(topPx: Int, heightPx: Int): FrameLayout.LayoutParams =
