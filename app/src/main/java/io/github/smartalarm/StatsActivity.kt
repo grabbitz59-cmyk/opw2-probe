@@ -100,6 +100,21 @@ class StatsActivity : ComponentActivity() {
         outer.addView(close, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { topMargin = dp(4) })
+        // Скилл wear-os-ui, R1: контент и кнопка подгоняются под круг
+        outer.post {
+            RoundScreen.applySafeWidths(root)
+            val loc = IntArray(2)
+            close.getLocationInWindow(loc)
+            val cy = loc[1] + close.height / 2f
+            val sw = resources.displayMetrics.widthPixels.toFloat()
+            val sh = resources.displayMetrics.heightPixels.toFloat()
+            val safe = RoundScreen.safeWidth(cy, sw, sh)
+            if (safe > 0f) {
+                val lp = close.layoutParams
+                lp.width = safe.toInt()
+                close.layoutParams = lp
+            }
+        }
         setContentView(outer)
     }
 

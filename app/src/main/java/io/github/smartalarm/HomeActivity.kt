@@ -9,11 +9,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.ScrollView
+import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,17 +21,18 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * Главный экран: круглый циферблат с кольцом прогресса до подъёма,
- * капсулы выбора окна, одна акцентная кнопка и три сервисные кнопки внизу.
+ * Главный экран по скиллу wear-os-ui:
+ * кольцо прогресса на весь экран, время в центре, под ним — статус, окно и одно действие.
  *
- * Логика та же, что была в 1.16 — изменена только подача: круг вместо списка строк,
- * тонкий шрифт времени, градиентный акцент и честный статус в центре.
+ * Широкие элементы стоят в средней полосе: у верхней и нижней дуги ширина круга падает
+ * почти до нуля (R1–R2). Вторичный экран (история ночи) — long-press по циферблату.
  */
 class HomeActivity : ComponentActivity() {
 
     private lateinit var dial: DialView
-    private lateinit var primary: TextView
-    private val chips = LinkedHashMap<Int, TextView>()
+    private lateinit var statusView: TextView
+    private lateinit var windowPill: TextView
+    private lateinit var cta: TextView
 
     private var hour = 7
     private var minute = 0
@@ -50,7 +50,7 @@ class HomeActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         refresh()
-        if (missingPerms().isEmpty()) dial.status = "разрешения выданы"
+        if (missingPerms().isEmpty()) statusView.text = "разрешения выданы"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -79,97 +79,82 @@ class HomeActivity : ComponentActivity() {
     // ---------- UI ----------
 
     private fun buildUi() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(Ui.bg)
-            setPadding(dp(10), dp(7), dp(10), dp(9))
-        }
+        val root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
 
         dial = DialView(this).apply {
             setOnClickListener { openSetup() }
+            setOnLongClickListener {
+                startActivity(Intent(this@HomeActivity, StatsActivity::class.java))
+                true
+            }
         }
-        root.addView(
-            dial,
-            LinearLayout.LayoutParams(dp(103), dp(103)),
-        )
+        root.addView(dial, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
 
-        root.addView(capsuleRow(), LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = dp(5) })
+        statusView = TextView(this).apply {
+            textSize = 10f
+            typeface = Ui.labelTypeface()
+            setTextColor(Ui.textSecondary)
+            gravity = Gravity.CENTER
+            setSingleLine(true)
+        }
+        root.addView(statusView, overlay(topPx = 216, heightPx = 26))
 
-        primary = TextView(this).apply {
-            text = "СОХРАНИТЬ И СПАТЬ"
+        windowPill = TextView(this).apply {
+            text = "окно ±$windowMin мин"
+            textSize = 11f
+            typeface = Ui.labelTypeface()
+            gravity = Gravity.CENTER
+            setTextColor(Ui.textSecondary)
+            setBackgroundResource(R.drawable.bg_pill_off)
+            setOnClickListener {
+                windowMin = when (windowMin) { 15 -> 30; 30 -> 45; 45 -> 60; else -> 15 }
+                Prefs.setWindowMin(this@HomeActivity, windowMin)
+                refresh()
+            }
+        }
+        root.addView(windowPill, overlay(topPx = 250, heightPx = 56))
+
+        cta = TextView(this).apply {
             textSize = 12f
             typeface = Ui.labelTypeface()
-            letterSpacing = 0.06f
+            letterSpacing = 0.05f
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#04211D"))
             setBackgroundResource(R.drawable.bg_cta)
-            setOnClickListener { onPrimary() }
-        }
-        root.addView(primary, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(38),
-        ).apply { topMargin = dp(6) })
-
-        val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        bottom.addView(
-            mini("Ночь") { startActivity(Intent(this@HomeActivity, StatsActivity::class.java)) },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginEnd = dp(3) },
-        )
-        bottom.addView(
-            mini("Тест") { testAlarm() },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginEnd = dp(3) },
-        )
-        bottom.addView(
-            mini("Диагн.") { startActivity(Intent(this@HomeActivity, ProbeActivity::class.java)) },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        root.addView(bottom, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = dp(5) })
-
-        setContentView(ScrollView(this).apply {
-            isFillViewport = true
-            setBackgroundColor(Ui.bg)
-            addView(root)
-        })
-    }
-
-    private fun capsuleRow(): LinearLayout {
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        for (w in intArrayOf(15, 30, 45, 60)) {
-            val pill = TextView(this).apply {
-                text = "$w"
-                textSize = 12f
-                typeface = Ui.labelTypeface()
-                gravity = Gravity.CENTER
-                setOnClickListener {
-                    windowMin = w
-                    Prefs.setWindowMin(this@HomeActivity, w)
-                    refresh()
-                }
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                onPrimary()
             }
-            row.addView(
-                pill,
-                LinearLayout.LayoutParams(0, dp(26), 1f).apply { marginEnd = dp(3) },
-            )
-            chips[w] = pill
         }
-        return row
+        root.addView(cta, overlay(topPx = 314, heightPx = 88))
+
+        setContentView(root)
+        root.post { applyGeometry(root) }
     }
 
-    private fun mini(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
-        text = label
-        textSize = 10f
-        typeface = Ui.labelTypeface()
-        gravity = Gravity.CENTER
-        setTextColor(Ui.textSecondary)
-        setBackgroundResource(R.drawable.bg_pill_off)
-        setPadding(0, dp(7), 0, dp(7))
-        setOnClickListener { onClick() }
+    private fun overlay(topPx: Int, heightPx: Int): FrameLayout.LayoutParams =
+        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, heightPx).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            topMargin = topPx
+        }
+
+    /** Ширины по геометрии круга (R1–R2): берём фактические границы строки. */
+    private fun applyGeometry(root: FrameLayout) {
+        val sw = resources.displayMetrics.widthPixels.toFloat()
+        val sh = resources.displayMetrics.heightPixels.toFloat()
+        fun cap(view: TextView, maxW: Float) {
+            val lp = view.layoutParams as FrameLayout.LayoutParams
+            val top = lp.topMargin.toFloat()
+            val bottom = top + lp.height
+            val safe = RoundScreen.safeRowWidth(top, bottom, sw, sh)
+            lp.width = minOf(maxW, if (safe > 0f) safe else maxW).toInt()
+            view.layoutParams = lp
+        }
+        cap(statusView, 420f)
+        cap(windowPill, 340f)
+        cap(cta, 240f)
     }
 
     // ---------- состояние ----------
@@ -184,43 +169,34 @@ class HomeActivity : ComponentActivity() {
         dial.running = running
         dial.targetAt = target
 
-        val diffMin = (((target - System.currentTimeMillis()) / 60_000).toInt()).coerceAtLeast(0)
+        val diffMin = ((target - System.currentTimeMillis()) / 60_000).toInt().coerceAtLeast(0)
         val tomorrow = Calendar.getInstance().apply { timeInMillis = target }
             .get(Calendar.DAY_OF_YEAR) != Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
-        dial.subtitle = when {
-            running -> "запись идёт · ±$windowMin мин"
-            armed -> "${if (tomorrow) "завтра" else "сегодня"} ${diffMin / 60}ч ${diffMin % 60}м"
-            else -> "не взведён · ±$windowMin мин"
-        }
 
         val missing = missingPerms()
-        dial.status = when {
-            missing.isNotEmpty() -> "нет прав: " + missing.joinToString(", ") { it.substringAfterLast('.') }
-            else -> buildString {
-                append(if (running) "LOG ON" else "LOG OFF")
-                append(" · HR ").append(HealthState.sourceNow())
-                append(" · ").append(batteryPct()).append('%')
-            }
+        statusView.setTextColor(if (missing.isEmpty()) Ui.textSecondary else Ui.danger)
+        statusView.text = when {
+            missing.isNotEmpty() ->
+                "нет прав: " + missing.joinToString(", ") { it.substringAfterLast('.') }
+            running -> "идёт запись · ${diffMin / 60}ч ${diffMin % 60}м · ${batteryPct()}%"
+            armed -> "${if (tomorrow) "завтра" else "сегодня"} · ${diffMin / 60}ч ${diffMin % 60}м"
+            else -> "не взведён · ${batteryPct()}%"
         }
 
-        for ((w, pill) in chips) {
-            val on = w == windowMin
-            pill.setBackgroundResource(if (on) R.drawable.bg_pill_on else R.drawable.bg_pill_off)
-            pill.setTextColor(if (on) Color.parseColor("#04211D") else Ui.textSecondary)
-        }
+        windowPill.text = "окно ±$windowMin мин"
 
         if (armed && running) {
-            primary.text = "ОСТАНОВИТЬ НОЧЬ"
-            primary.setBackgroundResource(R.drawable.bg_cta_stop)
-            primary.setTextColor(Ui.text)
+            cta.text = "ОСТАНОВИТЬ"
+            cta.setBackgroundResource(R.drawable.bg_cta_stop)
+            cta.setTextColor(Ui.text)
         } else if (armed) {
-            primary.text = "ВЗВЕДЁН · ЗАПУСТИТЬ ЗАПИСЬ"
-            primary.setBackgroundResource(R.drawable.bg_cta)
-            primary.setTextColor(Color.parseColor("#04211D"))
+            cta.text = "ЗАПУСТИТЬ ЗАПИСЬ"
+            cta.setBackgroundResource(R.drawable.bg_cta)
+            cta.setTextColor(Color.parseColor("#04211D"))
         } else {
-            primary.text = "СОХРАНИТЬ И СПАТЬ"
-            primary.setBackgroundResource(R.drawable.bg_cta)
-            primary.setTextColor(Color.parseColor("#04211D"))
+            cta.text = "СПАТЬ"
+            cta.setBackgroundResource(R.drawable.bg_cta)
+            cta.setTextColor(Color.parseColor("#04211D"))
         }
     }
 
@@ -231,12 +207,11 @@ class HomeActivity : ComponentActivity() {
         return if (at > System.currentTimeMillis()) at else targetEpoch()
     }
 
-    private fun isArmed(): Boolean = currentTargetStrict() > System.currentTimeMillis()
-
-    private fun currentTargetStrict(): Long {
+    private fun isArmed(): Boolean {
         val live = AlarmLogic.targetAt
         val stored = Prefs.alarmAt(this)
-        return if (live > 0) live else stored
+        val at = if (live > 0) live else stored
+        return at > System.currentTimeMillis()
     }
 
     private fun targetEpoch(): Long {
@@ -277,7 +252,8 @@ class HomeActivity : ComponentActivity() {
         }
         val missing = missingPerms()
         if (missing.isNotEmpty()) {
-            dial.status = "сначала разрешения"
+            statusView.setTextColor(Ui.danger)
+            statusView.text = "сначала разрешения"
             permLauncher.launch(missing.toTypedArray())
             return
         }
@@ -296,16 +272,14 @@ class HomeActivity : ComponentActivity() {
         }
         try {
             ContextCompat.startForegroundService(this, svc)
-            dial.status = "запускаю ночь…"
-            refresh()
+            statusView.text = "запускаю ночь…"
         } catch (t: Throwable) {
-            dial.status = "не удалось запустить: ${t.javaClass.simpleName}"
+            statusView.text = "не удалось: ${t.javaClass.simpleName}"
             return
         }
 
-        // Честный статус: не рапортовать успех, если сервис не поднялся
         handler.postDelayed({
-            if (!NightLogService.isRunning) dial.status = "лог НЕ запустился — открой Диагностику"
+            if (!NightLogService.isRunning) statusView.text = "лог НЕ запустился — long-press → история"
             refresh()
         }, 2_500L)
     }
@@ -328,16 +302,7 @@ class HomeActivity : ComponentActivity() {
         handler.postDelayed({ refresh() }, 1_200L)
     }
 
-    private fun testAlarm() {
-        sendBroadcast(Intent(this, AlarmTestReceiver::class.java))
-        dial.status = "тестовый будильник через 2 сек"
-    }
-
     private fun openSetup() {
         startActivity(Intent(this, AlarmSetupActivity::class.java))
     }
-
-    private fun dp(v: Int): Int = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics,
-    ).toInt()
 }
