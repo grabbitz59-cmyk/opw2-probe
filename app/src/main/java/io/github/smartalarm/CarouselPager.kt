@@ -96,6 +96,7 @@ class CarouselPager @JvmOverloads constructor(
     }
 
     private fun beginDrag(dx: Float) {
+        AlarmLogic.log(context, "carousel drag begin idx=$index dx=$dx")
         anim?.cancel()
         anim = null
         neighborIndex = if (dx < 0) (index + 1) % pages.size else (index - 1 + pages.size) % pages.size
@@ -156,6 +157,7 @@ class CarouselPager @JvmOverloads constructor(
         val curTo = if (toLeft) -screenW else screenW
         val nextTo = 0f
         busy = true
+        AlarmLogic.log(context, "carousel commit $index -> $neighborIndex dx=$dx")
         anim = ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 180L
             addUpdateListener { a ->
@@ -172,6 +174,7 @@ class CarouselPager @JvmOverloads constructor(
                     next.x = 0f
                     next.visibility = VISIBLE
                     busy = false
+                    AlarmLogic.log(context, "carousel settle idx=$index")
                     onPageChanged?.invoke(index)
                 }
             })
