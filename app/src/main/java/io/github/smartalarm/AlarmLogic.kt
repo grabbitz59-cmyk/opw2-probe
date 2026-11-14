@@ -110,8 +110,13 @@ object AlarmLogic {
     fun lastTriggerReason(): String = synchronized(lock) { lastTriggerReason }
 
     /** idle | armed | triggered — компактно пишется в CSV */
+    /**
+     * Состояние для CSV. «triggered» держим ещё 2 минуты после срабатывания:
+     * бакет лога пишется раз в 30 секунд, иначе строка с фазой подъёма может не попасть в файл.
+     */
     fun stateLabel(): String = when {
         triggered -> "triggered"
+        firedAt > 0 && System.currentTimeMillis() - firedAt < 120_000L -> "triggered"
         targetAt > 0 -> "armed"
         else -> "idle"
     }
