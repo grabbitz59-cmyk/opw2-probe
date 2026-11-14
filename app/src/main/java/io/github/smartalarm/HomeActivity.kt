@@ -184,15 +184,13 @@ class HomeActivity : ComponentActivity() {
             topMargin = topPx
         }
 
-    /** Ширины по геометрии круга (R1–R2): берём фактические границы строки. */
+    /** Ширины по геометрии круга нашей модели (R1–R2). */
     private fun applyGeometry(root: FrameLayout) {
-        val sw = resources.displayMetrics.widthPixels.toFloat()
-        val sh = resources.displayMetrics.heightPixels.toFloat()
         fun cap(view: TextView, maxW: Float) {
             val lp = view.layoutParams as FrameLayout.LayoutParams
             val top = lp.topMargin.toFloat()
             val bottom = top + lp.height
-            val safe = RoundScreen.safeRowWidth(top, bottom, sw, sh)
+            val safe = RoundScreen.safeRowWidth(top, bottom)
             lp.width = minOf(maxW, if (safe > 0f) safe else maxW).toInt()
             view.layoutParams = lp
         }

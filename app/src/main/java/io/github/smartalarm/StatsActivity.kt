@@ -74,9 +74,8 @@ class StatsActivity : ComponentActivity() {
 
         // По скиллу wear-os-ui (R1–R2): у нижней дуги круга ширина падает почти до нуля,
         // поэтому фиксированной кнопки внизу НЕТ — выход системным свайпом/кнопкой «назад»,
-        // как в вендорских приложениях. Контент ограничен вписанным квадратом.
-        val inset = ((resources.displayMetrics.widthPixels -
-            resources.displayMetrics.widthPixels / 1.4142f) / 2f).toInt() + dp(10)
+        // как в вендорских приложениях. Контент ограничен вписанным квадратом нашей модели.
+        val inset = RoundScreen.inscribedInsetPx() + dp(10)
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Ui.bg)
