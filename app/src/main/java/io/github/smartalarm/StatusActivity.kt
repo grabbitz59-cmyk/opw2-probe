@@ -166,7 +166,22 @@ class StatusActivity : ComponentActivity() {
             addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
         contentView = outer
-        setContentView(outer)
+        // Индикатор разделов: 3/3 — мы на «Статусе»
+        val frame = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(Ui.bg)
+            addView(outer)
+            addView(
+                PageDotsView(this@StatusActivity).apply { setPage(2, 3) },
+                android.widget.FrameLayout.LayoutParams(
+                    (90 * resources.displayMetrics.density).toInt(),
+                    (18 * resources.displayMetrics.density).toInt(),
+                ).apply {
+                    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                    bottomMargin = (10 * resources.displayMetrics.density).toInt()
+                },
+            )
+        }
+        setContentView(frame)
     }
 
     private fun addInfo(parent: LinearLayout, key: String, value: String) {

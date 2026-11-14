@@ -191,6 +191,19 @@ class HomeActivity : ComponentActivity() {
         }
         root.addView(cta, overlay(topPx = 314, heightPx = 88))
 
+        // Индикатор разделов: 1/3 — мы на «Будильнике»
+        val dots = PageDotsView(this).apply { setPage(0, 3) }
+        root.addView(
+            dots,
+            FrameLayout.LayoutParams(
+                (90 * resources.displayMetrics.density).toInt(),
+                (18 * resources.displayMetrics.density).toInt(),
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                bottomMargin = (10 * resources.displayMetrics.density).toInt()
+            },
+        )
+
         // Листание разделов: свайп влево открывает историю ночи (стабильный проверенный путь).
         // Карусель (CarouselPager) оставлена в проекте, но выключена: после первого перехода
         // пейджер перестаёт получать жесты (см. трассировку carousel в alarm_debug.txt).

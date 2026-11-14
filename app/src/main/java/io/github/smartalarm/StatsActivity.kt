@@ -202,9 +202,22 @@ class StatsActivity : ComponentActivity() {
         )
 
         contentView = outer
-        // Горизонтальные жесты не обрабатываем: листание разделов живёт на главном,
-        // а вертикальная прокрутка должна работать без конфликтов.
-        setContentView(outer)
+        // Индикатор разделов + контент: 2/3 — мы на «Ночи»
+        val frame = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(Ui.bg)
+            addView(outer)
+            addView(
+                PageDotsView(this@StatsActivity).apply { setPage(1, 3) },
+                android.widget.FrameLayout.LayoutParams(
+                    (90 * resources.displayMetrics.density).toInt(),
+                    (18 * resources.displayMetrics.density).toInt(),
+                ).apply {
+                    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                    bottomMargin = (10 * resources.displayMetrics.density).toInt()
+                },
+            )
+        }
+        setContentView(frame)
     }
 
     private fun load() {
