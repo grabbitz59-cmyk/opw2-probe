@@ -402,3 +402,16 @@ class HomeActivity : ComponentActivity() {
         startActivity(Intent(this, AlarmSetupActivity::class.java))
     }
 }
+
+    /**
+     * Страховка для карусели: если жест не дошёл (например, его съела система),
+     * кнопка/жест «назад» с истории возвращает на главный, а не закрывает приложение.
+     */
+    override fun onBackPressed() {
+        if (::pager.isInitialized && pager.currentIndex() != 0) {
+            pager.showPage(0)
+            return
+        }
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
+    }
