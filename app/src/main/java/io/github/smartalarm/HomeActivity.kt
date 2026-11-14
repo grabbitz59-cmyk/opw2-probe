@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -23,17 +22,15 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * Минимальный продуктовый экран: одно решение — «во сколько» и «разбуди в окне».
+ * Главный экран: круглый циферблат с кольцом прогресса до подъёма,
+ * капсулы выбора окна, одна акцентная кнопка и три сервисные кнопки внизу.
  *
- * Всё диагностическое (35 кнопок) осталось в [ProbeActivity] и открывается по «Диагностика».
- * Вёрстка рассчитана на круглый 466×466 при плотности 320 dpi (233 dp): тап-зоны крупные,
- * нижний ряд не упирается в дугу экрана.
+ * Логика та же, что была в 1.16 — изменена только подача: круг вместо списка строк,
+ * тонкий шрифт времени, градиентный акцент и честный статус в центре.
  */
 class HomeActivity : ComponentActivity() {
 
-    private lateinit var timeView: TextView
-    private lateinit var subView: TextView
-    private lateinit var statusView: TextView
+    private lateinit var dial: DialView
     private lateinit var primary: TextView
     private val chips = LinkedHashMap<Int, TextView>()
 
@@ -53,7 +50,7 @@ class HomeActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         refresh()
-        if (missingPerms().isEmpty()) statusView.text = "разрешения выданы · можно ложиться"
+        if (missingPerms().isEmpty()) dial.status = "разрешения выданы"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,160 +82,161 @@ class HomeActivity : ComponentActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(bg)
-            // нижний отступ держит контент внутри круглого экрана
-            setPadding(dp(14), dp(8), dp(14), dp(16))
+            setBackgroundColor(Ui.bg)
+            setPadding(dp(10), dp(7), dp(10), dp(9))
         }
 
-        timeView = TextView(this).apply {
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            setTextColor(Color.WHITE)
-            textSize = 34f
-            gravity = Gravity.CENTER
-            setPadding(0, 0, 0, 0)
+        dial = DialView(this).apply {
             setOnClickListener { openSetup() }
         }
-        root.addView(timeView, lp())
+        root.addView(
+            dial,
+            LinearLayout.LayoutParams(dp(112), dp(112)),
+        )
 
-        subView = TextView(this).apply {
-            setTextColor(Color.parseColor("#80CBC4"))
-            textSize = 10f
+        root.addView(capsuleRow(), LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(5) })
+
+        primary = TextView(this).apply {
+            text = "СОХРАНИТЬ И СПАТЬ"
+            textSize = 12f
+            typeface = Ui.labelTypeface()
+            letterSpacing = 0.06f
             gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#04211D"))
+            setBackgroundResource(R.drawable.bg_cta)
+            setOnClickListener { onPrimary() }
         }
-        root.addView(subView, lp())
+        root.addView(primary, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(38),
+        ).apply { topMargin = dp(6) })
 
-        val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        bottom.addView(
+            mini("Ночь") { startActivity(Intent(this@HomeActivity, StatsActivity::class.java)) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginEnd = dp(3) },
+        )
+        bottom.addView(
+            mini("Тест") { testAlarm() },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginEnd = dp(3) },
+        )
+        bottom.addView(
+            mini("Диагн.") { startActivity(Intent(this@HomeActivity, ProbeActivity::class.java)) },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        root.addView(bottom, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(5) })
+
+        setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(Ui.bg)
+            addView(root)
+        })
+    }
+
+    private fun capsuleRow(): LinearLayout {
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         for (w in intArrayOf(15, 30, 45, 60)) {
-            val chip = TextView(this).apply {
+            val pill = TextView(this).apply {
                 text = "$w"
-                textSize = 13f
+                textSize = 12f
+                typeface = Ui.labelTypeface()
                 gravity = Gravity.CENTER
-                setPadding(0, dp(11), 0, dp(11))
                 setOnClickListener {
                     windowMin = w
                     Prefs.setWindowMin(this@HomeActivity, w)
                     refresh()
                 }
             }
-            chipRow.addView(
-                chip,
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                    .apply { marginEnd = dp(4) },
+            row.addView(
+                pill,
+                LinearLayout.LayoutParams(0, dp(26), 1f).apply { marginEnd = dp(3) },
             )
-            chips[w] = chip
+            chips[w] = pill
         }
-        root.addView(chipRow, lp(top = 5))
-
-        primary = TextView(this).apply {
-            textSize = 13f
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#04211D"))
-            setPadding(0, dp(13), 0, dp(13))
-            setOnClickListener { onPrimary() }
-        }
-        root.addView(primary, lp(top = 5))
-
-        statusView = TextView(this).apply {
-            setTextColor(Color.parseColor("#90A4AE"))
-            textSize = 9f
-            gravity = Gravity.CENTER
-        }
-        root.addView(statusView, lp(top = 4))
-
-        val bottom = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        bottom.addView(
-            small("Ночь") {
-                startActivity(Intent(this@HomeActivity, StatsActivity::class.java))
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginEnd = dp(3) },
-        )
-        bottom.addView(
-            small("Тест") { testAlarm() },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginEnd = dp(3) },
-        )
-        bottom.addView(
-            small("Диагн.") {
-                startActivity(Intent(this@HomeActivity, ProbeActivity::class.java))
-            },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
-        )
-        root.addView(bottom, lp(top = 4))
-
-        setContentView(ScrollView(this).apply {
-            isFillViewport = true
-            setBackgroundColor(bg)
-            addView(root)
-        })
+        return row
     }
 
-    private fun small(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
+    private fun mini(label: String, onClick: () -> Unit): TextView = TextView(this).apply {
         text = label
         textSize = 10f
+        typeface = Ui.labelTypeface()
         gravity = Gravity.CENTER
-        setTextColor(Color.parseColor("#B0BEC5"))
-        setBackgroundResource(R.drawable.bg_chip_off)
-        setPadding(0, dp(10), 0, dp(10))
+        setTextColor(Ui.textSecondary)
+        setBackgroundResource(R.drawable.bg_pill_off)
+        setPadding(0, dp(7), 0, dp(7))
         setOnClickListener { onClick() }
     }
-
-    private fun lp(top: Int = 2) = LinearLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-    ).apply { topMargin = dp(top) }
 
     // ---------- состояние ----------
 
     private fun refresh() {
-        timeView.text = String.format(Locale.US, "%02d:%02d", hour, minute)
-
-        val at = targetEpoch()
-        val cal = Calendar.getInstance().apply { timeInMillis = at }
-        val now = Calendar.getInstance()
-        val tomorrow = cal.get(Calendar.DAY_OF_YEAR) != now.get(Calendar.DAY_OF_YEAR)
-        val diffMin = ((at - now.timeInMillis) / 60000).toInt().coerceAtLeast(0)
-        subView.text = buildString {
-            append(if (tomorrow) "завтра" else "сегодня")
-            append(" через ${diffMin / 60}ч ${diffMin % 60}м")
-            append(" · окно ±$windowMin")
-        }
-
-        for ((w, chip) in chips) {
-            val on = w == windowMin
-            chip.setBackgroundResource(if (on) R.drawable.bg_chip_on else R.drawable.bg_chip_off)
-            chip.setTextColor(if (on) Color.parseColor("#04211D") else Color.parseColor("#CFD8DC"))
-        }
-
         val armed = isArmed()
         val running = NightLogService.isRunning
+        val target = currentTarget()
+
+        dial.timeLabel = String.format(Locale.US, "%02d:%02d", hour, minute)
+        dial.armed = armed
+        dial.running = running
+        dial.targetAt = target
+
+        val diffMin = (((target - System.currentTimeMillis()) / 60_000).toInt()).coerceAtLeast(0)
+        val tomorrow = Calendar.getInstance().apply { timeInMillis = target }
+            .get(Calendar.DAY_OF_YEAR) != Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+        dial.subtitle = when {
+            running -> "запись идёт · ±$windowMin мин"
+            armed -> "${if (tomorrow) "завтра" else "сегодня"} ${diffMin / 60}ч ${diffMin % 60}м"
+            else -> "не взведён · ±$windowMin мин"
+        }
+
+        val missing = missingPerms()
+        dial.status = when {
+            missing.isNotEmpty() -> "нет прав: " + missing.joinToString(", ") { it.substringAfterLast('.') }
+            else -> buildString {
+                append(if (running) "LOG ON" else "LOG OFF")
+                append(" · HR ").append(HealthState.sourceNow())
+                append(" · ").append(batteryPct()).append('%')
+            }
+        }
+
+        for ((w, pill) in chips) {
+            val on = w == windowMin
+            pill.setBackgroundResource(if (on) R.drawable.bg_pill_on else R.drawable.bg_pill_off)
+            pill.setTextColor(if (on) Color.parseColor("#04211D") else Ui.textSecondary)
+        }
+
         if (armed && running) {
             primary.text = "ОСТАНОВИТЬ НОЧЬ"
             primary.setBackgroundResource(R.drawable.bg_cta_stop)
-            primary.setTextColor(Color.WHITE)
+            primary.setTextColor(Ui.text)
+        } else if (armed) {
+            primary.text = "ВЗВЕДЁН · ЗАПУСТИТЬ ЗАПИСЬ"
+            primary.setBackgroundResource(R.drawable.bg_cta)
+            primary.setTextColor(Color.parseColor("#04211D"))
         } else {
             primary.text = "СОХРАНИТЬ И СПАТЬ"
             primary.setBackgroundResource(R.drawable.bg_cta)
             primary.setTextColor(Color.parseColor("#04211D"))
         }
-
-        val missing = missingPerms()
-        statusView.setTextColor(Color.parseColor(if (missing.isEmpty()) "#90A4AE" else "#FF8A65"))
-        statusView.text = when {
-            missing.isNotEmpty() -> "нет прав: " + missing.joinToString(", ") { it.substringAfterLast('.') }
-            else -> buildString {
-                append(if (running) "лог идёт" else "лог выкл")
-                append(" · HR ").append(HealthState.sourceNow())
-                append(" · ").append(batteryPct()).append('%')
-            }
-        }
     }
 
-    private fun isArmed(): Boolean {
+    private fun currentTarget(): Long {
+        val stored = Prefs.alarmAt(this)
+        val live = AlarmLogic.targetAt
+        val at = if (live > 0) live else stored
+        return if (at > System.currentTimeMillis()) at else targetEpoch()
+    }
+
+    private fun isArmed(): Boolean = currentTargetStrict() > System.currentTimeMillis()
+
+    private fun currentTargetStrict(): Long {
         val live = AlarmLogic.targetAt
         val stored = Prefs.alarmAt(this)
-        val at = if (live > 0) live else stored
-        return at > System.currentTimeMillis()
+        return if (live > 0) live else stored
     }
 
     private fun targetEpoch(): Long {
@@ -279,8 +277,7 @@ class HomeActivity : ComponentActivity() {
         }
         val missing = missingPerms()
         if (missing.isNotEmpty()) {
-            statusView.setTextColor(Color.parseColor("#FF8A65"))
-            statusView.text = "сначала разрешения"
+            dial.status = "сначала разрешения"
             permLauncher.launch(missing.toTypedArray())
             return
         }
@@ -299,35 +296,28 @@ class HomeActivity : ComponentActivity() {
         }
         try {
             ContextCompat.startForegroundService(this, svc)
-            statusView.setTextColor(Color.parseColor("#90A4AE"))
-            statusView.text = "запускаю ночь…"
+            dial.status = "запускаю ночь…"
+            refresh()
         } catch (t: Throwable) {
-            statusView.setTextColor(Color.parseColor("#FF8A65"))
-            statusView.text = "не удалось запустить: ${t.javaClass.simpleName}"
+            dial.status = "не удалось запустить: ${t.javaClass.simpleName}"
             return
         }
 
         // Честный статус: не рапортовать успех, если сервис не поднялся
         handler.postDelayed({
-            if (!NightLogService.isRunning) {
-                statusView.setTextColor(Color.parseColor("#FF8A65"))
-                statusView.text = "лог НЕ запустился — открой Диагностику"
-            }
+            if (!NightLogService.isRunning) dial.status = "лог НЕ запустился — открой Диагностику"
             refresh()
         }, 2_500L)
     }
 
     private fun stopNight() {
         AlarmLogic.disarm(this)
-        val svc = Intent(this, NightLogService::class.java).apply {
-            action = NightLogService.ACTION_STOP
-        }
         try {
-            startService(svc)
+            startService(Intent(this, NightLogService::class.java).apply {
+                action = NightLogService.ACTION_STOP
+            })
         } catch (_: Throwable) {
         }
-        // Страховка: даже если сервис уже не запущен, снимаем passive-мониторинг,
-        // иначе PPG-датчик (зелёный диод) продолжает мерить пульс.
         val ctx = applicationContext
         Thread {
             try {
@@ -340,7 +330,7 @@ class HomeActivity : ComponentActivity() {
 
     private fun testAlarm() {
         sendBroadcast(Intent(this, AlarmTestReceiver::class.java))
-        statusView.text = "тестовый будильник через 2 сек"
+        dial.status = "тестовый будильник через 2 сек"
     }
 
     private fun openSetup() {
@@ -350,6 +340,4 @@ class HomeActivity : ComponentActivity() {
     private fun dp(v: Int): Int = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics,
     ).toInt()
-
-    private val bg = Color.parseColor("#0A0E10")
 }

@@ -3,16 +3,16 @@ package io.github.smartalarm
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.View
 
 /**
- * График ночи: пульс линией, движение столбиками, сон — подсветкой фона.
- *
- * Рисуется вручную (Canvas), без сторонних библиотек: на часах 466×466 это дешевле
- * и предсказуемее, чем тянуть MPAndroidChart в APK.
+ * График ночи в стиле вендорского приложения: акцентная линия пульса с градиентной
+ * заливкой под ней, приглушённые столбики движения, подсветка сна и маркер срабатывания.
  */
 class SleepChartView @JvmOverloads constructor(
     context: Context,
@@ -22,30 +22,27 @@ class SleepChartView @JvmOverloads constructor(
 
     private var night: SleepStats.Night? = null
 
-    private val bgPaint = Paint().apply { color = Color.parseColor("#11181B") }
-    private val gridPaint = Paint().apply {
-        color = Color.parseColor("#1E2A2E")
-        strokeWidth = 1f
-    }
+    private val gridPaint = Paint().apply { color = Color.parseColor("#182226"); strokeWidth = 1f }
     private val hrPaint = Paint().apply {
-        color = Color.parseColor("#80CBC4")
+        color = Ui.accent
         strokeWidth = 2.5f
-        isAntiAlias = true
         style = Paint.Style.STROKE
-    }
-    private val sleepPaint = Paint().apply { color = Color.parseColor("#127A6E50") }
-    private val motionPaint = Paint().apply {
-        color = Color.parseColor("#4B5A60")
         isAntiAlias = true
+        strokeCap = Paint.Cap.ROUND
+        strokeJoin = Paint.Join.ROUND
     }
+    private val fillPaint = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val sleepPaint = Paint().apply { color = Color.parseColor("#1400D1A9") }
+    private val motionPaint = Paint().apply { color = Color.parseColor("#2E3C41"); isAntiAlias = true }
     private val alarmPaint = Paint().apply {
-        color = Color.parseColor("#EF9A9A")
-        strokeWidth = 2f
+        color = Color.parseColor("#FF6B6B")
+        strokeWidth = 1.5f
     }
     private val labelPaint = Paint().apply {
-        color = Color.parseColor("#78909C")
-        textSize = 18f
+        color = Ui.textTertiary
+        textSize = 16f
         isAntiAlias = true
+        textAlign = Paint.Align.CENTER
     }
 
     fun setNight(n: SleepStats.Night?) {
@@ -57,39 +54,40 @@ class SleepChartView @JvmOverloads constructor(
         super.onDraw(canvas)
         val w = width.toFloat()
         val h = height.toFloat()
-        canvas.drawRect(0f, 0f, w, h, bgPaint)
-
         val n = night
         if (n == null || n.series.size < 2) {
-            canvas.drawText("нет данных", w / 2 - 45f, h / 2, labelPaint)
+            canvas.drawText("нет данных", w / 2f, h / 2f, labelPaint)
             return
         }
 
         val pad = 6f
-        val hrBottom = h * 0.66f          // зона пульса
-        val motionTop = h * 0.72f         // зона движения
+        val hrBottom = h * 0.70f
+        val motionTop = h * 0.76f
         val plotW = w - pad * 2
+        val span = (n.endTs - n.startTs).coerceAtLeast(1L).toFloat()
 
-        // сетка
         for (i in 0..2) {
             val y = pad + (hrBottom - pad) * i / 2f
-            canvas.drawLine(pad, y, w - pad, y, gridPaint)
+            canvas.drawLine(pad, y, pad + plotW, y, gridPaint)
         }
 
         // подсветка сна
-        val span = (n.endTs - n.startTs).coerceAtLeast(1L).toFloat()
+        val bucketW = (plotW * 30_000f / span).coerceAtLeast(1f)
         for (r in n.series) {
             if (!r.asleep) continue
             val x = pad + plotW * (r.ts - n.startTs) / span
-            canvas.drawRect(x, pad, x + plotW / n.series.size.coerceAtLeast(1), hrBottom, sleepPaint)
+            canvas.drawRect(x, pad, x + bucketW, hrBottom, sleepPaint)
         }
 
-        // пульс
         val hrMin = if (n.hrMin > 0) n.hrMin - 5 else 50
         val hrMax = if (n.hrMax > 0) n.hrMax + 5 else 110
         val hrRange = (hrMax - hrMin).coerceAtLeast(1)
-        val path = Path()
+
+        val line = Path()
+        val area = Path()
         var started = false
+        var firstX = 0f
+        var lastX = 0f
         for (r in n.series) {
             if (r.hr <= 0) {
                 started = false
@@ -98,17 +96,31 @@ class SleepChartView @JvmOverloads constructor(
             val x = pad + plotW * (r.ts - n.startTs) / span
             val y = hrBottom - (hrBottom - pad) * (r.hr - hrMin) / hrRange
             if (!started) {
-                path.moveTo(x, y)
+                line.moveTo(x, y)
+                area.moveTo(x, hrBottom)
+                area.lineTo(x, y)
+                firstX = x
                 started = true
             } else {
-                path.lineTo(x, y)
+                line.lineTo(x, y)
+                area.lineTo(x, y)
             }
+            lastX = x
         }
-        canvas.drawPath(path, hrPaint)
+        area.lineTo(lastX, hrBottom)
+        area.close()
+
+        fillPaint.shader = LinearGradient(
+            0f, pad, 0f, hrBottom,
+            Color.parseColor("#5500D1A9"), Color.parseColor("#0000D1A9"),
+            Shader.TileMode.CLAMP,
+        )
+        canvas.drawPath(area, fillPaint)
+        fillPaint.shader = null
+        canvas.drawPath(line, hrPaint)
 
         // движение
         val maxMovesPct = n.series.maxOfOrNull { ArousalMath.movesPct(it.n, it.moves) } ?: 0.0
-        val barW = (plotW / n.series.size).coerceAtLeast(1.2f)
         for (r in n.series) {
             if (!SleepStats.isMotion(r)) continue
             val x = pad + plotW * (r.ts - n.startTs) / span
@@ -118,14 +130,13 @@ class SleepChartView @JvmOverloads constructor(
                 (r.std / 2.0).coerceIn(0.15, 1.0).toFloat()
             }
             val barH = (h - pad - motionTop) * strength
-            canvas.drawRect(x, h - pad - barH, x + barW, h - pad, motionPaint)
+            canvas.drawRect(x, h - pad - barH, x + bucketW, h - pad, motionPaint)
         }
 
-        // срабатывание будильника
+        // момент срабатывания
         if (n.alarmFired) {
-            val firstAlarm = n.series.firstOrNull { it.alarmState == "triggered" }
-            if (firstAlarm != null) {
-                val x = pad + plotW * (firstAlarm.ts - n.startTs) / span
+            n.series.firstOrNull { it.alarmState == "triggered" }?.let { r ->
+                val x = pad + plotW * (r.ts - n.startTs) / span
                 canvas.drawLine(x, pad, x, h - pad, alarmPaint)
             }
         }

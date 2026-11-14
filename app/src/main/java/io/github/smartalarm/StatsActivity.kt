@@ -41,13 +41,13 @@ class StatsActivity : ComponentActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(Color.parseColor("#0A0E10"))
+            setBackgroundColor(Ui.bg)
             setPadding(dp(12), dp(4), dp(12), dp(4))
         }
 
-        root.addView(text("ПРОШЛАЯ НОЧЬ", 9f, "#546E7A").apply { letterSpacing = 0.16f })
+        root.addView(text("ПРОШЛАЯ НОЧЬ", 9f, Ui.ACCENT).apply { letterSpacing = 0.18f })
 
-        chart = SleepChartView(this)
+        chart = SleepChartView(this).apply { setBackgroundResource(R.drawable.bg_card) }
         root.addView(
             chart,
             // 65dp = 130px при 320dpi: остаётся место на сводку и кнопку без прокрутки
@@ -55,7 +55,7 @@ class StatsActivity : ComponentActivity() {
                 .apply { topMargin = dp(3) },
         )
 
-        summaryView = text("загружаю…", 9f, "#B0BEC5").apply {
+        summaryView = text("загружаю…", 9f, Ui.TEXT_SECONDARY).apply {
             gravity = Gravity.START
             setPadding(dp(2), dp(4), dp(2), 0)
             setLineSpacing(dp(1).toFloat(), 1f)
@@ -64,7 +64,7 @@ class StatsActivity : ComponentActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        fileView = text("", 8f, "#546E7A").apply {
+        fileView = text("", 8f, Ui.TEXT_TERTIARY).apply {
             gravity = Gravity.START
             setPadding(dp(2), dp(4), dp(2), 0)
         }
@@ -86,13 +86,13 @@ class StatsActivity : ComponentActivity() {
         // и тогда ScrollView подрезал её у самой круглой кромки.
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#0A0E10"))
+            setBackgroundColor(Ui.bg)
             setPadding(dp(12), dp(8), dp(12), dp(14))
         }
         outer.addView(
             ScrollView(this).apply {
                 isFillViewport = true
-                setBackgroundColor(Color.parseColor("#0A0E10"))
+                setBackgroundColor(Ui.bg)
                 addView(root)
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
