@@ -98,10 +98,14 @@ def main() -> int:
     big_gaps = [g for g in gaps if g > 90]
     lost_min = sum(big_gaps) / 60.0
 
-    fresh = [
-        r for r in rows
-        if as_int(r.get("hr_samples")) > 0 and as_int(r.get("hr_age_s"), 10**9) <= HR_FRESH_MAX_AGE_S
-    ]
+    # Свежесть пульса считаем по ЕДИНОМУ источнику (hr_source), а не по числу сэмплов
+    # своего сенсора: на OPW2 android.sensor.heart_rate отдаёт 0, и старый критерий
+    # показывал 20 % там, где HealthState реально имел свежий passive-HR.
+    def hr_is_fresh(r: dict) -> bool:
+        src = (r.get("hr_source") or "none").strip()
+        return src in ("sensor", "passive") and as_int(r.get("hr_bpm"), -1) > 0
+
+    fresh = [r for r in rows if hr_is_fresh(r)]
     hr_fresh_pct = 100.0 * len(fresh) / len(rows)
 
     hr_vals = [as_int(r.get("hr_bpm")) for r in rows if as_int(r.get("hr_bpm")) > 0]
