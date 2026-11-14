@@ -32,7 +32,8 @@ class PhaseEstimatorTest {
         )
         assertEquals(
             SleepStats.Stage.LIGHT,
-            PhaseEstimator.estimate(hrNow = 57f, hrMedian = 60f, motionRecent = false),
+            // 58 выше порога 60 * 0.96 = 57.6, значит это уже лёгкий сон
+            PhaseEstimator.estimate(hrNow = 58f, hrMedian = 60f, motionRecent = false),
         )
     }
 
