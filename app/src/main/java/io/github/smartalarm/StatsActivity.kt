@@ -40,24 +40,61 @@ class StatsActivity : ComponentActivity() {
         load()
     }
 
-    // ---------- свайп: возврат на главный экран (R11) ----------
+    override fun onResume() {
+        super.onResume()
+        // После слайд-перехода возвращаем контент в исходное положение
+        if (::contentView.isInitialized) {
+            contentView.translationX = 0f
+            contentView.alpha = 1f
+        }
+    }
+
+    // ---------- свайп: экран тянется за пальцем и уходит вправо (R11–R12) ----------
     private var swipeDownX = 0f
     private var swipeDownY = 0f
+    private var dragging = false
+    private lateinit var contentView: android.widget.LinearLayout
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 swipeDownX = ev.x
                 swipeDownY = ev.y
+                dragging = false
             }
-            MotionEvent.ACTION_UP -> {
+
+            MotionEvent.ACTION_MOVE -> {
                 val dx = ev.x - swipeDownX
                 val dy = ev.y - swipeDownY
-                if (swipeDownX > 70f && kotlin.math.abs(dx) >= 90f &&
-                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f
+                if (!dragging && swipeDownX > 70f && dx > 24f &&
+                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f
                 ) {
-                    finish()
-                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                    dragging = true
+                }
+                if (dragging) {
+                    contentView.translationX = dx.coerceIn(0f, width.toFloat())
+                    contentView.alpha = 1f - 0.25f * (contentView.translationX / width)
+                    return true
+                }
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (dragging) {
+                    val dx = ev.x - swipeDownX
+                    dragging = false
+                    if (dx >= 90f) {
+                        contentView.animate()
+                            .translationX(width.toFloat())
+                            .alpha(0.35f)
+                            .setDuration(140L)
+                            .withEndAction {
+                                finish()
+                                overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+                            }
+                            .start()
+                    } else {
+                        contentView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
+                    }
                     return true
                 }
             }
@@ -133,6 +170,7 @@ class StatsActivity : ComponentActivity() {
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
+        contentView = outer
         setContentView(outer)
     }
 

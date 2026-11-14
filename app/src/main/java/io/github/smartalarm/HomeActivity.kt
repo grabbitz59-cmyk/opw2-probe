@@ -111,6 +111,9 @@ class HomeActivity : ComponentActivity() {
         hour = Prefs.targetHour(this)
         minute = Prefs.targetMinute(this)
         windowMin = Prefs.windowMin(this)
+        // Возвращаемся на место после слайд-перехода (leftover translation)
+        rootFrame.translationX = 0f
+        rootFrame.alpha = 1f
         refresh()
         handler.postDelayed(ticker, 1_000L)
     }
@@ -210,30 +213,66 @@ class HomeActivity : ComponentActivity() {
     }
 
 
-    // ---------- свайп между экранами (R11) ----------
+    // ---------- свайп между экранами (R11–R12): экран тянется за пальцем ----------
     private var swipeDownX = 0f
     private var swipeDownY = 0f
+    private var dragging = false
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 swipeDownX = ev.x
                 swipeDownY = ev.y
+                dragging = false
             }
-            MotionEvent.ACTION_UP -> {
+
+            MotionEvent.ACTION_MOVE -> {
                 val dx = ev.x - swipeDownX
                 val dy = ev.y - swipeDownY
-                // Свайп из центра экрана; от левого края жест оставляем системе («назад»).
-                if (swipeDownX > 70f && kotlin.math.abs(dx) >= 90f &&
-                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f
+                // Тянем только из центральной зоны: левый край — системный «назад».
+                if (!dragging && swipeDownX > 70f && dx < -24f &&
+                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f
                 ) {
-                    startActivity(Intent(this, StatsActivity::class.java)); overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                    dragging = true
+                }
+                if (dragging) {
+                    rootFrame.translationX = dx.coerceIn(-width.toFloat(), 0f)
+                    rootFrame.alpha = 1f - 0.25f * (-rootFrame.translationX / width)
+                    return true
+                }
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (dragging) {
+                    val dx = ev.x - swipeDownX
+                    dragging = false
+                    if (dx <= -90f) openStatsWithSlide() else snapBack()
                     return true
                 }
             }
         }
         return super.dispatchTouchEvent(ev)
     }
+
+    private fun snapBack() {
+        rootFrame.animate().translationX(0f).alpha(1f).setDuration(160L).start()
+    }
+
+    /** Доводим экран влево и открываем историю со слайд-переходом, как в оболочке. */
+    private fun openStatsWithSlide() {
+        rootFrame.animate()
+            .translationX(-width.toFloat())
+            .alpha(0.35f)
+            .setDuration(140L)
+            .withEndAction {
+                startActivity(Intent(this, StatsActivity::class.java))
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+                rootFrame.translationX = 0f
+                rootFrame.alpha = 1f
+            }
+            .start()
+    }
+
     // ---------- состояние ----------
 
     private fun refresh() {
