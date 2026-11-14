@@ -72,22 +72,15 @@ class StatsActivity : ComponentActivity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        val close = TextView(this).apply {
-            text = "ЗАКРЫТЬ"
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#04211D"))
-            setBackgroundResource(R.drawable.bg_cta)
-            setPadding(0, dp(7), 0, dp(7))
-            setOnClickListener { finish() }
-        }
-
-        // Кнопка — в фиксированном подвале вне скролла: контент бывает выше экрана,
-        // и тогда ScrollView подрезал её у самой круглой кромки.
+        // По скиллу wear-os-ui (R1–R2): у нижней дуги круга ширина падает почти до нуля,
+        // поэтому фиксированной кнопки внизу НЕТ — выход системным свайпом/кнопкой «назад»,
+        // как в вендорских приложениях. Контент ограничен вписанным квадратом.
+        val inset = ((resources.displayMetrics.widthPixels -
+            resources.displayMetrics.widthPixels / 1.4142f) / 2f).toInt() + dp(6)
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Ui.bg)
-            setPadding(dp(12), dp(28), dp(12), dp(16))
+            setPadding(inset, dp(26), inset, dp(18))
         }
         outer.addView(
             ScrollView(this).apply {
@@ -97,24 +90,6 @@ class StatsActivity : ComponentActivity() {
             },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
-        outer.addView(close, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, dp(36),
-        ).apply { topMargin = dp(4) })
-        // Скилл wear-os-ui, R1: контент и кнопка подгоняются под круг
-        outer.post {
-            RoundScreen.applySafeWidths(root)
-            val loc = IntArray(2)
-            close.getLocationInWindow(loc)
-            val cy = loc[1] + close.height / 2f
-            val sw = resources.displayMetrics.widthPixels.toFloat()
-            val sh = resources.displayMetrics.heightPixels.toFloat()
-            val safe = RoundScreen.safeRowWidth(loc[1].toFloat(), loc[1] + close.height.toFloat(), sw, sh)
-            if (safe > 0f) {
-                val lp = close.layoutParams
-                lp.width = safe.toInt()
-                close.layoutParams = lp
-            }
-        }
         setContentView(outer)
     }
 
