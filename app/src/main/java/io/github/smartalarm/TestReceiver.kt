@@ -47,7 +47,11 @@ class TestReceiver : BroadcastReceiver() {
                     UiLog.add("stop: $t")
                 }
             }
-            ACTION_STOP_ALARM -> AlarmPlayer.stop(app)
+            ACTION_STOP_ALARM -> {
+                AlarmPlayer.stop(app)
+                AlarmLogic.onAlarmStopped(app)
+            }
+            ACTION_SNOOZE -> AlarmLogic.snooze(app)
             ACTION_DISARM -> {
                 AlarmLogic.disarm(app)
                 AlarmPlayer.stop(app)
@@ -123,6 +127,7 @@ class TestReceiver : BroadcastReceiver() {
         const val ACTION_START_FULL = "io.github.smartalarm.START_FULL"
         const val ACTION_STOP_LOG = "io.github.smartalarm.STOP_LOG"
         const val ACTION_STOP_ALARM = "io.github.smartalarm.STOP_ALARM"
+        const val ACTION_SNOOZE = "io.github.smartalarm.SNOOZE"
         const val ACTION_DUMP_LOG = "io.github.smartalarm.DUMP_LOG"
         const val ACTION_RUN_PASSIVE = "io.github.smartalarm.RUN_PASSIVE"
         const val ACTION_STOP_PASSIVE = "io.github.smartalarm.STOP_PASSIVE"
