@@ -50,14 +50,15 @@ class StatsActivity : ComponentActivity() {
         chart = SleepChartView(this)
         root.addView(
             chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150))
-                .apply { topMargin = dp(4) },
+            // 75dp = 150px при 320dpi: остаётся место на сводку и кнопку без прокрутки
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(75))
+                .apply { topMargin = dp(3) },
         )
 
-        summaryView = text("загружаю…", 10f, "#B0BEC5").apply {
+        summaryView = text("загружаю…", 9f, "#B0BEC5").apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(6), dp(2), 0)
-            setLineSpacing(dp(2).toFloat(), 1f)
+            setPadding(dp(2), dp(4), dp(2), 0)
+            setLineSpacing(dp(1).toFloat(), 1f)
         }
         root.addView(summaryView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -145,11 +146,15 @@ class StatsActivity : ComponentActivity() {
         fileView.text = "файл: ${file.name}"
     }
 
+    /**
+     * Берём самый ИНФОРМАТИВНЫЙ файл, а не самый свежий: после коротких тестовых
+     * прогонов «последним» оказывается файл на 2 строки, и график показывает пустоту.
+     */
     private fun latestProbeFile(): File? {
         val dir = getExternalFilesDir(null) ?: filesDir
         return dir.listFiles()
             ?.filter { it.isFile && it.name.startsWith("probe_") && it.name.endsWith(".csv") }
-            ?.maxByOrNull { it.lastModified() }
+            ?.maxWithOrNull(compareBy<File> { it.length() }.thenBy { it.lastModified() })
     }
 
     private fun text(value: String, size: Float, color: String): TextView = TextView(this).apply {
