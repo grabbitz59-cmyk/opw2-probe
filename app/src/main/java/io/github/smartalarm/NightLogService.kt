@@ -423,7 +423,9 @@ class NightLogService : Service(), SensorEventListener {
             iso, now, mode, pct, charging, tempC, screenOn, doze,
             hb, hAge, n, fmt(mean), fmt(std), fmt(p2p), mv, hrs,
             SystemClock.elapsedRealtime() / 1000,
-            hrSrc, sawAsleep, alarmState, AlarmLogic.wakePhaseCode(),
+            hrSrc, sawAsleep, alarmState,
+            // фаза пишется ТОЛЬКО в строке срабатывания, остальные строки пустые
+            if (alarmState == "triggered") AlarmLogic.wakePhaseCode() else "",
         ).joinToString(",")
         writeRaw(line)
         AlarmLogic.onBucket(this, n, mv, std, p2p)
