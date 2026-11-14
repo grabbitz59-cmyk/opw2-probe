@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
@@ -34,6 +36,16 @@ class SliderRowView @JvmOverloads constructor(
         }
 
     var onChange: ((Int) -> Unit)? = null
+
+    /** Долгое нажатие по шкале — например, переключение шага минут 5 ↔ 1. */
+    var onLongPress: (() -> Unit)? = null
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var longPressFired = false
+    private val longPressRunnable = Runnable {
+        longPressFired = true
+        onLongPress?.invoke()
+    }
 
     private val trackRect = RectF()
     private val trackPaint = Paint().apply { isAntiAlias = true; color = Ui.surfaceHi }
@@ -105,12 +117,15 @@ class SliderRowView @JvmOverloads constructor(
                 downY = event.y
                 startValue = value
                 dragging = false
+                longPressFired = false
+                handler.postDelayed(longPressRunnable, 600L)
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
                 val dy = downY - event.y
                 val dx = kotlin.math.abs(event.x - downX)
+                if (kotlin.math.abs(dy) > 12f || dx > 12f) handler.removeCallbacks(longPressRunnable)
                 if (!dragging && kotlin.math.abs(dy) > 12f && kotlin.math.abs(dy) > dx) {
                     dragging = true
                 }
@@ -128,11 +143,15 @@ class SliderRowView @JvmOverloads constructor(
             }
 
             MotionEvent.ACTION_UP -> {
-                if (!dragging) applyX(event.x)
+                handler.removeCallbacks(longPressRunnable)
+                if (!dragging && !longPressFired) applyX(event.x)
                 return true
             }
 
-            MotionEvent.ACTION_CANCEL -> return true
+            MotionEvent.ACTION_CANCEL -> {
+                handler.removeCallbacks(longPressRunnable)
+                return true
+            }
         }
         return super.onTouchEvent(event)
     }

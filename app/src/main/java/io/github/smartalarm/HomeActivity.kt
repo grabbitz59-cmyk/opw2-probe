@@ -157,6 +157,15 @@ class HomeActivity : ComponentActivity() {
                 Prefs.setWindowMin(this@HomeActivity, windowMin)
                 refresh()
             }
+            // Долгое нажатие — повтор по дням (выкл → будни → все дни).
+            // Отдельная кнопка не нужна: экран по скиллу держит одно главное действие.
+            setOnLongClickListener {
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                val next = RepeatDays.nextMask(Prefs.repeatDays(this@HomeActivity))
+                Prefs.setRepeatDays(this@HomeActivity, next)
+                refresh()
+                true
+            }
         }
         root.addView(windowPill, overlay(topPx = 250, heightPx = 56))
 
@@ -225,7 +234,9 @@ class HomeActivity : ComponentActivity() {
             else -> "не взведён · ${batteryPct()}%"
         }
 
-        windowPill.text = "окно ±$windowMin мин"
+        val repeat = Prefs.repeatDays(this)
+        windowPill.text = if (repeat == RepeatDays.NONE) "окно ±$windowMin мин"
+        else "окно ±$windowMin · ${RepeatDays.label(repeat)}"
 
         if (armed && running) {
             cta.text = "ОСТАНОВИТЬ"

@@ -89,6 +89,8 @@ class AlarmTestReceiver : BroadcastReceiver() {
 class StopAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         AlarmPlayer.stop(context)
+        // Остановка из уведомления тоже учитывает повтор по дням
+        AlarmLogic.onAlarmStopped(context)
     }
 }
 
@@ -135,6 +137,16 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
             gravity = android.view.Gravity.CENTER
             setPadding(0, 0, 0, 10)
         }
+        val snooze = android.widget.Button(this).apply {
+            text = "ОТЛОЖИТЬ ${Prefs.snoozeMin(this@AlarmActivity)} МИН"
+            textSize = 16f
+            isAllCaps = false
+            setOnClickListener {
+                AlarmLogic.snooze(this@AlarmActivity)
+                AlarmPlayer.stop(this@AlarmActivity)
+                finish()
+            }
+        }
         val stop = android.widget.Button(this).apply {
             text = "ОСТАНОВИТЬ"
             textSize = 18f
@@ -148,6 +160,7 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
         }
         root.addView(title)
         root.addView(time)
+        root.addView(snooze)
         root.addView(stop)
         root.addView(hint)
         setContentView(root)
@@ -162,6 +175,8 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
 
     private fun finishAlarm() {
         AlarmPlayer.stop(this)
+        // Повтор включён → взводим на следующий день, иначе снимаем
+        AlarmLogic.onAlarmStopped(this)
         finish()
     }
 

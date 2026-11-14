@@ -62,7 +62,7 @@ class AlarmSetupActivity : ComponentActivity() {
         root.addView(hourSlider, at(topPx = 168, heightPx = 68, widthCap = 380f))
 
         val minuteSlider = SliderRowView(this).apply {
-            label = "минуты"
+            label = "минуты · шаг 5"
             minValue = 0
             maxValue = 55
             step = 5
@@ -70,6 +70,16 @@ class AlarmSetupActivity : ComponentActivity() {
             onChange = { v ->
                 minute = v
                 performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                renderTime()
+            }
+            // Долгое нажатие по шкале минут: шаг 5 ↔ 1 (точность до минуты)
+            onLongPress = {
+                step = if (step == 5) 1 else 5
+                maxValue = if (step == 1) 59 else 55
+                label = "минуты · шаг $step"
+                minute = (minute / step) * step
+                value = minute
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                 renderTime()
             }
         }

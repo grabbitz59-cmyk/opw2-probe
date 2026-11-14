@@ -127,6 +127,35 @@ object AlarmLogic {
         }
     }
 
+    /** Отложить будильник на snoozeMin минут (окно сужаем до нуля). */
+    fun snooze(ctx: Context) {
+        val minutes = Prefs.snoozeMin(ctx)
+        val at = System.currentTimeMillis() + minutes * 60_000L
+        arm(ctx, at, 0)
+        log(ctx, "snooze ${minutes}m -> ${Instant.ofEpochMilli(at)}")
+    }
+
+    /**
+     * Пользователь остановил будильник: если включён повтор — сразу взводим на следующий
+     * подходящий день, иначе снимаем. Раньше будильник после срабатывания оставался
+     * в состоянии triggered и на следующую ночь не работал.
+     */
+    fun onAlarmStopped(ctx: Context) {
+        val mask = Prefs.repeatDays(ctx)
+        if (mask == RepeatDays.NONE) {
+            disarm(ctx)
+            return
+        }
+        val at = RepeatDays.nextOccurrence(
+            System.currentTimeMillis(),
+            Prefs.targetHour(ctx),
+            Prefs.targetMinute(ctx),
+            mask,
+        )
+        arm(ctx, at, Prefs.windowMin(ctx))
+        log(ctx, "re-arm next ${Instant.ofEpochMilli(at)} repeat=${RepeatDays.label(mask)}")
+    }
+
     // ---------- fallback через AlarmManager ----------
 
     private fun fallbackPi(ctx: Context): PendingIntent = PendingIntent.getBroadcast(
