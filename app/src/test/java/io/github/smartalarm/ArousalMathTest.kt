@@ -52,7 +52,10 @@ class ArousalMathTest {
 
     @Test
     fun `median odd and even`() {
-        assertEquals(3.0f, ArousalMath.median(listOf(1f, 3f, 2f))!!, 1e-6f)
+        // Несортированный вход: медиана [1,2,3] = 2
+        assertEquals(2.0f, ArousalMath.median(listOf(1f, 3f, 2f))!!, 1e-6f)
+        assertEquals(3.0f, ArousalMath.median(listOf(5f, 1f, 3f))!!, 1e-6f)
+        // Чётное количество: медиана [1,2,3,4] = 2.5
         assertEquals(2.5f, ArousalMath.median(listOf(1f, 2f, 3f, 4f))!!, 1e-6f)
         assertNull(ArousalMath.median(emptyList()))
     }
