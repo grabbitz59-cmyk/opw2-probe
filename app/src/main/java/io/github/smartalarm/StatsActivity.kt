@@ -76,11 +76,11 @@ class StatsActivity : ComponentActivity() {
         // поэтому фиксированной кнопки внизу НЕТ — выход системным свайпом/кнопкой «назад»,
         // как в вендорских приложениях. Контент ограничен вписанным квадратом.
         val inset = ((resources.displayMetrics.widthPixels -
-            resources.displayMetrics.widthPixels / 1.4142f) / 2f).toInt() + dp(6)
+            resources.displayMetrics.widthPixels / 1.4142f) / 2f).toInt() + dp(10)
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Ui.bg)
-            setPadding(inset, dp(26), inset, dp(18))
+            setPadding(inset, dp(44), inset, dp(18))
         }
         outer.addView(
             ScrollView(this).apply {
