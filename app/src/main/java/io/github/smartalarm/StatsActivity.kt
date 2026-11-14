@@ -133,7 +133,7 @@ class StatsActivity : ComponentActivity() {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Ui.bg)
-            setPadding(inset, dp(62), inset, dp(96))
+            setPadding(inset, dp(40), inset, dp(52))
         }
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
