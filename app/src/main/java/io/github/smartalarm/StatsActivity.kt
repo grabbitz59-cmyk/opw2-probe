@@ -121,7 +121,7 @@ class StatsActivity : ComponentActivity() {
 
         fileView = text("", 9f, Ui.TEXT_TERTIARY).apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(6), dp(2), dp(10))
+            setPadding(dp(2), dp(6), dp(2), dp(4))
         }
         root.addView(fileView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -129,11 +129,11 @@ class StatsActivity : ComponentActivity() {
 
         // Контент вписан в квадрат нашей модели (R1–R2) и прокручивается вниз:
         // шрифт крупный, поэтому всё в один экран не влезает — это осознанно.
-        val inset = RoundScreen.inscribedInsetPx() + dp(8)
+        val inset = RoundScreen.inscribedInsetPx() + dp(16)
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Ui.bg)
-            setPadding(inset, dp(58), inset, dp(30))
+            setPadding(inset, dp(62), inset, dp(96))
         }
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
