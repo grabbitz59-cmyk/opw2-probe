@@ -29,6 +29,7 @@ class CyclePager @JvmOverloads constructor(
     private var downY = 0f
     private var dragging = false
     private var neighbor: android.view.View? = null
+    private var committing = false
 
     private val screenW: Float get() = resources.displayMetrics.widthPixels.toFloat()
 
@@ -105,6 +106,10 @@ class CyclePager @JvmOverloads constructor(
     }
 
     private fun startDrag(dx: Float) {
+        // Гасим возможные незавершённые анимации прошлого перехода (иначе их
+        // withEndAction приходит позже и сбрасывает индекс — страница «залипает»)
+        committing = false
+        pages.forEach { it.animate().cancel() }
         val nextIndex = if (dx < 0) (index + 1) % pages.size else (index - 1 + pages.size) % pages.size
         neighbor = pages[nextIndex]
         // Следующая страница стоит с той стороны, откуда её тянем
@@ -134,11 +139,17 @@ class CyclePager @JvmOverloads constructor(
                         val n = neighbor ?: return true
                         val nextIndex = if (toLeft) (index + 1) % pages.size
                         else (index - 1 + pages.size) % pages.size
+                        committing = true
                         current.animate()
                             .translationX(if (toLeft) -screenW else screenW)
                             .alpha(0.35f)
                             .setDuration(160L)
-                            .withEndAction { settle(nextIndex, if (toLeft) -screenW else screenW) }
+                            .withEndAction {
+                                if (committing) {
+                                    committing = false
+                                    settle(nextIndex, if (toLeft) -screenW else screenW)
+                                }
+                            }
                             .start()
                         n.animate().translationX(0f).alpha(1f).setDuration(160L).start()
                     } else {
