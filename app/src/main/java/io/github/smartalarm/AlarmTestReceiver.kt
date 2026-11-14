@@ -59,10 +59,16 @@ class AlarmTestReceiver : BroadcastReceiver() {
             Intent(context, StopAlarmReceiver::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        // Отложить из уведомления: не нужно разблокировать часы, чтобы дотянуться до экрана
+        val snoozeIntent = PendingIntent.getBroadcast(
+            context, 93,
+            Intent(context, SnoozeAlarmReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
 
         val n = Notification.Builder(context, CHANNEL_ID)
             .setContentTitle("БУДИЛЬНИК · ПОДЪЁМ")
-            .setContentText("Нажмите СТОП, чтобы выключить")
+            .setContentText("ОТЛОЖИТЬ ${Prefs.snoozeMin(context)} МИН или СТОП")
             .setSmallIcon(R.drawable.ic_probe)
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
@@ -70,6 +76,11 @@ class AlarmTestReceiver : BroadcastReceiver() {
             .setAutoCancel(false)
             .setContentIntent(full)
             .setFullScreenIntent(full, true)
+            .addAction(
+                Notification.Action.Builder(
+                    null, "ОТЛОЖИТЬ ${Prefs.snoozeMin(context)} МИН", snoozeIntent,
+                ).build(),
+            )
             .addAction(Notification.Action.Builder(null, "СТОП", stop).build())
             .build()
         nm.notify(AlarmPlayer.ALARM_NOTIFICATION_ID, n)
@@ -146,6 +157,18 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
                 AlarmPlayer.stop(this@AlarmActivity)
                 finish()
             }
+            // Долгое нажатие — выбрать 5 / 10 / 15 минут (сохраняется в настройках)
+            setOnLongClickListener {
+                val next = when (Prefs.snoozeMin(this@AlarmActivity)) {
+                    5 -> 10
+                    10 -> 15
+                    else -> 5
+                }
+                Prefs.setSnoozeMin(this@AlarmActivity, next)
+                text = "ОТЛОЖИТЬ $next МИН"
+                performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                true
+            }
         }
         val stop = android.widget.Button(this).apply {
             text = "ОСТАНОВИТЬ"
@@ -182,5 +205,18 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+    }
+}
+/**
+ * «Отложить» из уведомления будильника: гасим звук и взводим на snoozeMin минут.
+ * Нужен потому, что экран будильника Wear OS не всегда выводит на передний план —
+ * будильник должен выключаться и без него.
+ */
+class SnoozeAlarmReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        AlarmPlayer.stop(context)
+        AlarmLogic.snooze(context)
+        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .cancel(AlarmPlayer.ALARM_NOTIFICATION_ID)
     }
 }

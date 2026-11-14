@@ -101,6 +101,10 @@
             android:exported="false" />
 
         <receiver
+            android:name=".SnoozeAlarmReceiver"
+            android:exported="false" />
+
+        <receiver
             android:name=".StopAlarmReceiver"
             android:exported="false" />
 
