@@ -294,14 +294,30 @@ class StatsActivity : ComponentActivity() {
         if (minutes < 60) "${minutes}м" else "${minutes / 60}ч ${minutes % 60}м"
 
     /**
-     * Берём самый ИНФОРМАТИВНЫЙ файл (по размеру), а не самый свежий:
-     * после коротких тестовых прогонов «последним» оказывается файл на 2 строки.
+     * Выбор файла ночи: приоритет — файл, в котором есть строка срабатывания с записанной
+     * фазой подъёма (иначе на экране нечего показать про пробуждение). Если таких нет —
+     * самый информативный по размеру.
      */
     private fun bestProbeFile(): File? {
         val dir = getExternalFilesDir(null) ?: filesDir
-        return dir.listFiles()
+        val files = dir.listFiles()
             ?.filter { it.isFile && it.name.startsWith("probe_") && it.name.endsWith(".csv") }
-            ?.maxWithOrNull(compareBy<File> { it.length() }.thenBy { it.lastModified() })
+            ?: return null
+        if (files.isEmpty()) return null
+        return files.filter { hasWakePhaseRow(it) }.maxByOrNull { it.length() }
+            ?: files.maxWithOrNull(compareBy<File> { it.length() }.thenBy { it.lastModified() })
+    }
+
+    /** Есть ли в файле строка «будильник сработал» с непустой фазой (21-я колонка). */
+    private fun hasWakePhaseRow(f: File): Boolean = try {
+        f.useLines { lines ->
+            lines.any { line ->
+                val parts = line.trimEnd().split(',')
+                parts.size >= 21 && parts[19] == "triggered" && parts[20].isNotBlank()
+            }
+        }
+    } catch (_: Throwable) {
+        false
     }
 
     private fun text(value: String, size: Float, color: String): TextView = TextView(this).apply {
