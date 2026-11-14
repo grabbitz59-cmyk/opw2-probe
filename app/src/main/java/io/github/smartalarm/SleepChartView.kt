@@ -112,10 +112,10 @@ class SleepChartView @JvmOverloads constructor(
         for (r in n.series) {
             if (!SleepStats.isMotion(r)) continue
             val x = pad + plotW * (r.ts - n.startTs) / span
-            val strength = if (maxMovesPct > 0) {
-                (ArousalMath.movesPct(r.n, r.moves) / maxMovesPct).coerceIn(0.15, 1.0)
+            val strength: Float = if (maxMovesPct > 0) {
+                (ArousalMath.movesPct(r.n, r.moves) / maxMovesPct).coerceIn(0.15, 1.0).toFloat()
             } else {
-                (r.std / 2.0).coerceIn(0.15, 1.0)
+                (r.std / 2.0).coerceIn(0.15, 1.0).toFloat()
             }
             val barH = (h - pad - motionTop) * strength
             canvas.drawRect(x, h - pad - barH, x + barW, h - pad, motionPaint)
