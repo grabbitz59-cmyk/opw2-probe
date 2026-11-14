@@ -51,7 +51,7 @@ class StatsActivity : ComponentActivity() {
         }
     }
 
-    // ---------- свайп: экран тянется за пальцем и уходит вправо (R11–R12) ----------
+    // ---------- циклическая прокрутка: тянем за палец в любую сторону (R11–R13) ----------
     private var swipeDownX = 0f
     private var swipeDownY = 0f
     private var dragging = false
@@ -68,14 +68,14 @@ class StatsActivity : ComponentActivity() {
             MotionEvent.ACTION_MOVE -> {
                 val dx = ev.x - swipeDownX
                 val dy = ev.y - swipeDownY
-                if (!dragging && swipeDownX > 70f && dx > 24f &&
+                if (!dragging && swipeDownX > 70f && kotlin.math.abs(dx) > 24f &&
                     kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f
                 ) {
                     dragging = true
                 }
                 if (dragging) {
-                    contentView.translationX = dx.coerceIn(0f, screenW)
-                    contentView.alpha = 1f - 0.25f * (contentView.translationX / screenW)
+                    contentView.translationX = dx
+                    contentView.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
                     return true
                 }
             }
@@ -84,14 +84,21 @@ class StatsActivity : ComponentActivity() {
                 if (dragging) {
                     val dx = ev.x - swipeDownX
                     dragging = false
-                    if (dx >= 90f) {
+                    if (kotlin.math.abs(dx) >= 90f) {
+                        val toLeft = dx < 0
                         contentView.animate()
-                            .translationX(screenW)
+                            .translationX(if (toLeft) -screenW else screenW)
                             .alpha(0.35f)
                             .setDuration(140L)
                             .withEndAction {
                                 finish()
-                                overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+                                // Циклически: следующий экран приходит с той стороны,
+                                // куда мы листаем — без «обратного» свайпа.
+                                if (toLeft) {
+                                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+                                } else {
+                                    overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+                                }
                             }
                             .start()
                     } else {

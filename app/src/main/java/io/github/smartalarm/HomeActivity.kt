@@ -215,7 +215,7 @@ class HomeActivity : ComponentActivity() {
     }
 
 
-    // ---------- свайп между экранами (R11–R12): экран тянется за пальцем ----------
+    // ---------- циклическая прокрутка экранов (R11–R13) ----------
     private var swipeDownX = 0f
     private var swipeDownY = 0f
     private var dragging = false
@@ -231,15 +231,15 @@ class HomeActivity : ComponentActivity() {
             MotionEvent.ACTION_MOVE -> {
                 val dx = ev.x - swipeDownX
                 val dy = ev.y - swipeDownY
-                // Тянем только из центральной зоны: левый край — системный «назад».
-                if (!dragging && swipeDownX > 70f && dx < -24f &&
+                // Тянем из любой стороны, кроме системной зоны «назад» у левого края.
+                if (!dragging && swipeDownX > 70f && kotlin.math.abs(dx) > 24f &&
                     kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f
                 ) {
                     dragging = true
                 }
                 if (dragging) {
-                    rootFrame.translationX = dx.coerceIn(-screenW, 0f)
-                    rootFrame.alpha = 1f - 0.25f * (-rootFrame.translationX / screenW)
+                    rootFrame.translationX = dx
+                    rootFrame.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
                     return true
                 }
             }
@@ -248,7 +248,7 @@ class HomeActivity : ComponentActivity() {
                 if (dragging) {
                     val dx = ev.x - swipeDownX
                     dragging = false
-                    if (dx <= -90f) openStatsWithSlide() else snapBack()
+                    if (kotlin.math.abs(dx) >= 90f) openStatsWithSlide(dx < 0) else snapBack()
                     return true
                 }
             }
@@ -269,15 +269,23 @@ class HomeActivity : ComponentActivity() {
         rootFrame.animate().translationX(0f).alpha(1f).setDuration(160L).start()
     }
 
-    /** Доводим экран влево и открываем историю со слайд-переходом, как в оболочке. */
-    private fun openStatsWithSlide() {
+    /**
+     * Циклическая прокрутка: с главного в историю можно уйти в ЛЮБУЮ сторону —
+     * свайп влево или вправо одинаково перелистывает на следующую «страницу».
+     */
+    private fun openStatsWithSlide(toLeft: Boolean) {
+        val target = if (toLeft) -screenW else screenW
         rootFrame.animate()
-            .translationX(-screenW)
+            .translationX(target)
             .alpha(0.35f)
             .setDuration(140L)
             .withEndAction {
                 startActivity(Intent(this, StatsActivity::class.java))
-                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+                if (toLeft) {
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+                } else {
+                    overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+                }
                 rootFrame.translationX = 0f
                 rootFrame.alpha = 1f
             }
