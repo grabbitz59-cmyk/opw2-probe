@@ -87,6 +87,16 @@ class ProbeActivity : ComponentActivity() {
             append("AUTO: стоп лога")
             stopLog()
         }
+        if (i.getBooleanExtra("capture_ppg", false)) {
+            // Захват 60 с запускаем из активити: из broadcast-приёмника и шелла
+            // foreground-сервис не поднять (background FGS start запрещён / сервис не exported).
+            try {
+                ContextCompat.startForegroundService(this, Intent(this, PpgCaptureService::class.java))
+                append("AUTO: захват PPG 60 с")
+            } catch (t: Throwable) {
+                append("AUTO: capture не запустился: $t")
+            }
+        }
     }
 
     private fun buildUi() {
