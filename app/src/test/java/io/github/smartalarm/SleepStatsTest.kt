@@ -76,7 +76,8 @@ class SleepStatsTest {
         val night = SleepStats.summarize(rows)!!
         assertEquals(10, night.rows)
         assertEquals(60, night.hrMin)
-        assertEquals(65, night.hrAvg)
+        // среднее 60..69 = 64.5, приводится к Int отбрасыванием дробной части
+        assertEquals(64, night.hrAvg)
         assertEquals(69, night.hrMax)
         assertEquals(10, night.hrWindows)
         assertEquals(80, night.batteryStart)
@@ -87,12 +88,15 @@ class SleepStatsTest {
 
     @Test
     fun `coverage below hundred when buckets are missing`() {
-        // Окна: 0, 30с, 10 мин — между ними дыра
+        // Окна: 0, 30 с, 10 мин — между ними дыра длиной 21 бакет
         val rows = listOf(0L, 30_000L, 600_000L).map {
             SleepStats.parseLine(line(ts = it))!!
         }
         val night = SleepStats.summarize(rows)!!
-        assertTrue(night.coveragePct < 10.0)
+        assertEquals(3, night.rows)
+        // 3 строки из 21 ожидаемого бакета
+        assertEquals(100.0 * 3 / 21, night.coveragePct, 0.01)
+        assertTrue(night.coveragePct < 20.0)
     }
 
     @Test
