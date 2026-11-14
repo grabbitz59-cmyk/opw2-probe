@@ -136,11 +136,7 @@ class HomeActivity : ComponentActivity() {
             setOnClickListener { openSetup() }
             setOnLongClickListener {
                 // Долгое нажатие по циферблату — история ночи (вторая страница карусели)
-                if (::pager.isInitialized) {
-                    pager.showPage(1)
-                } else {
-                    openStats()
-                }
+                openStats()
                 true
             }
         }
@@ -419,10 +415,6 @@ class HomeActivity : ComponentActivity() {
      */
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (::pager.isInitialized && pager.currentIndex() != 0) {
-            pager.showPage(0)
-            return
-        }
         @Suppress("DEPRECATION")
         super.onBackPressed()
     }
