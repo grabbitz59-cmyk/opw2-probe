@@ -22,8 +22,18 @@ class TestReceiver : BroadcastReceiver() {
                 run(app, dir, "Ppg") { PpgTest.run(sm) }
             }
             ACTION_RAW -> {
-                val sm = app.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-                run(app, dir, "PpgRaw") { RawPpg.capture(sm, dir, 60_000) }
+                // Захват идёт 60 с. Внутри receiver он обрывался на ~12-й секунде
+                // (система не даёт receiver'у жить так долго), поэтому запускаем
+                // foreground-сервис. Из adb это делается командой
+                // am start-foreground-service -n io.github.smartalarm/.PpgCaptureService
+                try {
+                    androidx.core.content.ContextCompat.startForegroundService(
+                        app, Intent(app, PpgCaptureService::class.java)
+                    )
+                } catch (t: Throwable) {
+                    File(dir, "actions.txt")
+                        .appendText("${java.time.Instant.now()} RUN_RAW service failed: $t\n")
+                }
             }
             ACTION_START_ECO -> startLog(app, NightLogService.MODE_ECO, false)
             ACTION_START_ECO_NW -> startLog(app, NightLogService.MODE_ECO, true)

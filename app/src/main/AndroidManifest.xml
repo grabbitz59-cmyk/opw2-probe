@@ -63,6 +63,12 @@
             android:exported="false"
             android:foregroundServiceType="health" />
 
+        <!-- Захват сырого PPG на 60 с: receiver столько не живёт -->
+        <service
+            android:name=".PpgCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="health" />
+
         <activity
             android:name=".AlarmSetupActivity"
             android:exported="true"
