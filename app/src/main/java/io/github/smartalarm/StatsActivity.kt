@@ -83,70 +83,73 @@ class StatsActivity : ComponentActivity() {
             setPadding(dp(2), dp(2), dp(2), dp(2))
         }
 
-        root.addView(text("ПРОШЛАЯ НОЧЬ", 9f, Ui.ACCENT).apply { letterSpacing = 0.18f })
+        root.addView(text("ПРОШЛАЯ НОЧЬ", 11f, Ui.ACCENT).apply { letterSpacing = 0.16f })
 
         chart = SleepChartView(this).apply { setBackgroundResource(R.drawable.bg_card) }
         root.addView(
             chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(54))
-                .apply { topMargin = dp(3) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(96))
+                .apply { topMargin = dp(4) },
         )
 
-        summaryView = text("загружаю…", 8f, Ui.TEXT_SECONDARY).apply {
+        summaryView = text("загружаю…", 11f, Ui.TEXT_SECONDARY).apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(4), dp(2), 0)
-            setLineSpacing(dp(1).toFloat(), 1f)
+            setPadding(dp(2), dp(6), dp(2), 0)
+            setLineSpacing(dp(2).toFloat(), 1f)
         }
         root.addView(summaryView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        phasesView = text("", 8f, Ui.ACCENT).apply {
+        phasesView = text("", 11f, Ui.ACCENT).apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(3), dp(2), 0)
+            setPadding(dp(2), dp(6), dp(2), 0)
+            setLineSpacing(dp(2).toFloat(), 1f)
         }
         root.addView(phasesView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        efficiencyView = text("", 8f, Ui.TEXT_SECONDARY).apply {
+        efficiencyView = text("", 11f, Ui.TEXT_SECONDARY).apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(1), dp(2), 0)
+            setPadding(dp(2), dp(4), dp(2), 0)
+            setLineSpacing(dp(2).toFloat(), 1f)
         }
         root.addView(efficiencyView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        fileView = text("", 8f, Ui.TEXT_TERTIARY).apply {
+        fileView = text("", 9f, Ui.TEXT_TERTIARY).apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(4), dp(2), 0)
+            setPadding(dp(2), dp(6), dp(2), dp(10))
         }
         root.addView(fileView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        // Контент ограничен вписанным квадратом нашей модели (R1–R2).
-        // ScrollView здесь НЕ используется сознательно: он перехватывает горизонтальный
-        // жест, и листание на историю не работает (проверено на устройстве).
-        val inset = RoundScreen.inscribedInsetPx() + dp(10)
+        // Контент вписан в квадрат нашей модели (R1–R2) и прокручивается вниз:
+        // шрифт крупный, поэтому всё в один экран не влезает — это осознанно.
+        val inset = RoundScreen.inscribedInsetPx() + dp(8)
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Ui.bg)
-            setPadding(inset, dp(20), inset, dp(14))
+            setPadding(inset, dp(58), inset, dp(30))
+        }
+        val scroll = android.widget.ScrollView(this).apply {
+            isFillViewport = true
+            setBackgroundColor(Ui.bg)
+            isVerticalScrollBarEnabled = true
             addView(root)
         }
+        outer.addView(
+            scroll,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+        )
 
         contentView = outer
-        // Жест ловит контейнер: иначе внутренние вью съедают горизонтальный drag
-        val wrap = SwipeWrapLayout(this)
-        wrap.addView(outer)
-        wrap.onDrag = { dx ->
-            contentView.translationX = dx
-            contentView.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
-        }
-        wrap.onCommit = { dx -> commitSwipe(dx) }
-        wrap.onCancel = { revert() }
-        setContentView(wrap)
+        // Горизонтальные жесты не обрабатываем: листание разделов живёт на главном,
+        // а вертикальная прокрутка должна работать без конфликтов.
+        setContentView(outer)
     }
 
     private fun load() {

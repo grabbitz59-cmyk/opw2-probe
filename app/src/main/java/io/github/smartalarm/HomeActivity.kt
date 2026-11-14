@@ -145,17 +145,17 @@ class HomeActivity : ComponentActivity() {
         ))
 
         statusView = TextView(this).apply {
-            textSize = 10f
+            textSize = 13f
             typeface = Ui.labelTypeface()
             setTextColor(Ui.textSecondary)
             gravity = Gravity.CENTER
             setSingleLine(true)
         }
-        root.addView(statusView, overlay(topPx = 216, heightPx = 26))
+        root.addView(statusView, overlay(topPx = 206, heightPx = 34))
 
         windowPill = TextView(this).apply {
             text = "окно ±$windowMin мин"
-            textSize = 11f
+            textSize = 13f
             typeface = Ui.labelTypeface()
             gravity = Gravity.CENTER
             setTextColor(Ui.textSecondary)
@@ -178,7 +178,7 @@ class HomeActivity : ComponentActivity() {
         root.addView(windowPill, overlay(topPx = 250, heightPx = 56))
 
         cta = TextView(this).apply {
-            textSize = 12f
+            textSize = 15f
             typeface = Ui.labelTypeface()
             letterSpacing = 0.05f
             gravity = Gravity.CENTER
