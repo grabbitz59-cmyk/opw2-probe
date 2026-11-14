@@ -146,7 +146,7 @@ class SleepStatsTest {
         assertTrue("глубокий есть", n.deepMin > 0)
         assertTrue("лёгкий есть", n.lightMin > 0)
         assertTrue("эффективность в диапазоне", n.efficiencyPct in 0.0..100.0)
-        val bucketMin = (SleepStats.BUCKET_MS / 60_000L).toInt()
+        val bucketMin = (SleepStats.BUCKET_MS / 60_000L).toInt().coerceAtLeast(1)
         val unknown = n.stages.count { it == SleepStats.Stage.UNKNOWN } * bucketMin
         assertEquals(20 * bucketMin, n.deepMin + n.lightMin + n.awakeMin + unknown)
     }
