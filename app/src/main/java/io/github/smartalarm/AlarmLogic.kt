@@ -133,12 +133,12 @@ object AlarmLogic {
         }
     }
 
-    /** Отложить будильник на snoozeMin минут (окно сужаем до нуля). */
+    /** Отложить будильник на snoozeMin минут (окно сужаем до нуля, настройку не трогаем). */
     fun snooze(ctx: Context) {
         val minutes = Prefs.snoozeMin(ctx)
         val at = System.currentTimeMillis() + minutes * 60_000L
-        arm(ctx, at, 0)
-        log(ctx, "snooze ${minutes}m -> ${Instant.ofEpochMilli(at)}")
+        arm(ctx, at, windowMin = 0, persistWindow = false)
+        log(ctx, "snooze ${minutes}m -> ${Instant.ofEpochMilli(at)} (window kept ${Prefs.windowMin(ctx)}m)")
     }
 
     /**
