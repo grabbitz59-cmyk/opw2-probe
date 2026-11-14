@@ -118,6 +118,7 @@
                 <action android:name="io.github.smartalarm.START_FULL" />
                 <action android:name="io.github.smartalarm.STOP_LOG" />
                 <action android:name="io.github.smartalarm.STOP_ALARM" />
+                <action android:name="io.github.smartalarm.DISARM" />
                 <action android:name="io.github.smartalarm.DUMP_LOG" />
                 <action android:name="io.github.smartalarm.RUN_PASSIVE" />
                 <action android:name="io.github.smartalarm.STOP_PASSIVE" />

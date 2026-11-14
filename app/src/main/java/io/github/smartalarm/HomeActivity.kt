@@ -91,7 +91,7 @@ class HomeActivity : ComponentActivity() {
         }
         root.addView(
             dial,
-            LinearLayout.LayoutParams(dp(112), dp(112)),
+            LinearLayout.LayoutParams(dp(103), dp(103)),
         )
 
         root.addView(capsuleRow(), LinearLayout.LayoutParams(

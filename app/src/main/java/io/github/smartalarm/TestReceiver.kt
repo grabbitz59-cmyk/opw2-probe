@@ -48,6 +48,10 @@ class TestReceiver : BroadcastReceiver() {
                 }
             }
             ACTION_STOP_ALARM -> AlarmPlayer.stop(app)
+            ACTION_DISARM -> {
+                AlarmLogic.disarm(app)
+                AlarmPlayer.stop(app)
+            }
             ACTION_RUN_PASSIVE -> {
                 Thread {
                     val text = HealthPassive.start(app)
@@ -113,6 +117,7 @@ class TestReceiver : BroadcastReceiver() {
         const val ACTION_HC = "io.github.smartalarm.RUN_HC"
         const val ACTION_PPG = "io.github.smartalarm.RUN_PPG"
         const val ACTION_RAW = "io.github.smartalarm.RUN_RAW"
+        const val ACTION_DISARM = "io.github.smartalarm.DISARM"
         const val ACTION_START_ECO = "io.github.smartalarm.START_ECO"
         const val ACTION_START_ECO_NW = "io.github.smartalarm.START_ECO_NW"
         const val ACTION_START_FULL = "io.github.smartalarm.START_FULL"
