@@ -42,7 +42,7 @@ class StatsActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setBackgroundColor(Color.parseColor("#0A0E10"))
-            setPadding(dp(12), dp(8), dp(12), dp(10))
+            setPadding(dp(12), dp(8), dp(12), dp(12))
         }
 
         root.addView(text("ПРОШЛАЯ НОЧЬ", 9f, "#546E7A").apply { letterSpacing = 0.16f })
@@ -50,8 +50,8 @@ class StatsActivity : ComponentActivity() {
         chart = SleepChartView(this)
         root.addView(
             chart,
-            // 75dp = 150px при 320dpi: остаётся место на сводку и кнопку без прокрутки
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(75))
+            // 65dp = 130px при 320dpi: остаётся место на сводку и кнопку без прокрутки
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(65))
                 .apply { topMargin = dp(3) },
         )
 
@@ -78,7 +78,7 @@ class StatsActivity : ComponentActivity() {
             gravity = Gravity.CENTER
             setTextColor(Color.parseColor("#04211D"))
             setBackgroundResource(R.drawable.bg_cta)
-            setPadding(0, dp(9), 0, dp(9))
+            setPadding(0, dp(7), 0, dp(7))
             setOnClickListener { finish() }
         }
         root.addView(close, LinearLayout.LayoutParams(
