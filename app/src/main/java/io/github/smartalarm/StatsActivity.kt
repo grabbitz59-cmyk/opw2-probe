@@ -42,7 +42,7 @@ class StatsActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setBackgroundColor(Color.parseColor("#0A0E10"))
-            setPadding(dp(12), dp(8), dp(12), dp(12))
+            setPadding(dp(12), dp(4), dp(12), dp(4))
         }
 
         root.addView(text("ПРОШЛАЯ НОЧЬ", 9f, "#546E7A").apply { letterSpacing = 0.16f })
@@ -81,15 +81,26 @@ class StatsActivity : ComponentActivity() {
             setPadding(0, dp(7), 0, dp(7))
             setOnClickListener { finish() }
         }
-        root.addView(close, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = dp(8) })
 
-        setContentView(ScrollView(this).apply {
-            isFillViewport = true
+        // Кнопка — в фиксированном подвале вне скролла: контент бывает выше экрана,
+        // и тогда ScrollView подрезал её у самой круглой кромки.
+        val outer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#0A0E10"))
-            addView(root)
-        })
+            setPadding(dp(12), dp(8), dp(12), dp(14))
+        }
+        outer.addView(
+            ScrollView(this).apply {
+                isFillViewport = true
+                setBackgroundColor(Color.parseColor("#0A0E10"))
+                addView(root)
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
+        )
+        outer.addView(close, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(4) })
+        setContentView(outer)
     }
 
     private fun load() {
