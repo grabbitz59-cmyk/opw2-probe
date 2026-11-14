@@ -16,8 +16,8 @@ android {
         applicationId = "io.github.smartalarm"
         minSdk = 30
         targetSdk = 34
-        versionCode = 24
-        versionName = "1.14-passive"
+        versionCode = 25
+        versionName = "1.15-tests"
     }
 
     signingConfigs {
@@ -60,4 +60,7 @@ dependencies {
     implementation("androidx.health:health-services-client:1.1.0")
     implementation("com.google.guava:guava:32.1.3-android")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
+
+    // Чистая логика arousal проверяется JVM-тестами, без часов и эмулятора.
+    testImplementation("junit:junit:4.13.2")
 }

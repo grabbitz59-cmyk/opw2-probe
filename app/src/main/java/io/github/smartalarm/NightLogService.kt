@@ -85,13 +85,24 @@ class NightLogService : Service(), SensorEventListener {
     }
     private var lastBattery: Intent? = null
 
+    private var bucketFailures = 0
+
     private val bucket: Runnable = object : Runnable {
         override fun run() {
             try {
                 writeBucket()
+                bucketFailures = 0
             } catch (t: Throwable) {
-                stopSelf()
-                return
+                // Раньше любой сбой в бакете делал stopSelf() — ночь умирала молча.
+                // Теперь одиночный сбой только логируем и продолжаем; сдаёмся
+                // лишь после серии из 10 подряд.
+                bucketFailures++
+                errorLog("bucket failed ($bucketFailures)", t)
+                if (bucketFailures >= 10) {
+                    Prefs.setRunning(this@NightLogService, false)
+                    stopSelf()
+                    return
+                }
             }
             handler.postDelayed(this, BUCKET_MS)
         }

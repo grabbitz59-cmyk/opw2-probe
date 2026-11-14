@@ -43,6 +43,9 @@ jobs:
           KEY_ALIAS: probe
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      - name: Unit tests (arousal logic)
+        run: gradle --no-daemon --stacktrace test
+
       - name: PPG pipeline selftest
         run: |
           python3 -m pip install --quiet numpy

@@ -23,18 +23,9 @@ import java.util.Locale
 object AlarmLogic {
 
     private const val HR_MAX_AGE_MS = 300_000L            // насколько старый HR ещё считается свежим
-    private const val BASELINE_WINDOW_MS = 45 * 60_000L   // окно для baseline
-    private const val BASELINE_MIN_SAMPLES = 8            // минимум уникальных значений
-    private const val HR_RISE_BPM = 8.0f                  // подъём пульса, значимый для arousal
-    private const val QUIET_FOR_ASLEEP_MS = 20 * 60_000L  // тишина, после которой считаем «уснул»
     private const val MOTION_HOLD_MS = 90_000L            // движение «свежее» в течение 90 с
 
-    // Пороги откалиброваны по реальным данным с OPW2 на спокойной руке:
-    //   moves/n = 0.27–0.8 %, std = 0.21–0.32 м/с², p2p = 3.3–3.5 м/с².
-    // Старые значения (std>0.10, p2p>1.2) давали «движение» почти в каждом бакете.
-    private const val MOTION_MOVES_PCT = 4.0              // доля «рывков» от числа сэмплов, %
-    private const val MOTION_STD = 0.80                   // std магнитуды, м/с²
-    private const val MOTION_P2P = 8.0                    // peak-to-peak, м/с²
+    // Пороги и математика — в [ArousalMath] (чистый объект, покрыт JVM-тестами).
 
     @Volatile
     var targetAt: Long = 0
@@ -183,7 +174,7 @@ object AlarmLogic {
         val fresh = HealthState.freshHr(HR_MAX_AGE_MS)
         if (fresh != null) addSample(now, fresh)
 
-        if (isMotion(n, moves, std, p2p)) {
+        if (ArousalMath.isMotion(n, moves, std, p2p)) {
             synchronized(lock) { lastMotionTs = now }
         }
 
@@ -196,7 +187,7 @@ object AlarmLogic {
 
         val base = baseline(now)
         val hr = fresh
-        val hrRise = hr != null && base != null && (hr - base) >= HR_RISE_BPM
+        val hrRise = ArousalMath.hrRise(hr, base)
         val asleepSeen = ensureAsleep(ctx, now)
 
         val sysState = HealthState.freshestate(20 * 60_000L)
@@ -222,22 +213,14 @@ object AlarmLogic {
         }
     }
 
-    private fun isMotion(n: Int, moves: Int, std: Double, p2p: Double): Boolean {
-        // Нет данных акселерометра — это не признак движения (батчинг может отдать пустое окно).
-        if (n <= 0) return false
-        val movesPct = 100.0 * moves / n
-        return movesPct >= MOTION_MOVES_PCT || std > MOTION_STD || p2p > MOTION_P2P
-    }
-
     /** Возвращает true, если сон уже подтверждён. */
     private fun ensureAsleep(ctx: Context, now: Long): Boolean {
         if (synchronized(lock) { sawAsleep }) return true
         val quiet = quietMinutesNow()
-        if (quiet < QUIET_FOR_ASLEEP_MS / 60_000L) return false
         val uniq = synchronized(lock) {
-            hrSamples.filter { now - it.first <= BASELINE_WINDOW_MS }.map { it.second }
+            ArousalMath.windowValues(hrSamples, now)
         }
-        if (uniq.size < BASELINE_MIN_SAMPLES) return false
+        if (!ArousalMath.asleepInferred(quiet, uniq.size)) return false
         synchronized(lock) { sawAsleep = true }
         log(ctx, "inferred asleep (quiet ${quiet}m, hr samples ${uniq.size})")
         return true
@@ -262,7 +245,7 @@ object AlarmLogic {
 
         val asleepSeen = synchronized(lock) { sawAsleep }
         val quiet = quietMinutesNow()
-        if (!asleepSeen && quiet < QUIET_FOR_ASLEEP_MS / 60_000L) {
+        if (!ArousalMath.arousalAllowed(asleepSeen, quiet)) {
             log(ctx, "arousal ignored (no sleep evidence, quiet=${quiet}m): $why")
             return
         }
@@ -274,23 +257,17 @@ object AlarmLogic {
     private fun addSample(now: Long, hr: Float) {
         synchronized(lock) {
             // дубликаты одного и того же passive-значения не должны надувать выборку
-            if (hr == lastHrValue && now - lastHrAt < 60_000L) return
+            if (!ArousalMath.shouldAddSample(lastHrValue, lastHrAt, hr, now)) return
             lastHrValue = hr
             lastHrAt = now
             hrSamples.add(now to hr)
-            hrSamples.removeAll { now - it.first > BASELINE_WINDOW_MS }
+            hrSamples.removeAll { now - it.first > ArousalMath.BASELINE_WINDOW_MS }
         }
     }
 
     /** Медиана уникальных значений за окно — устойчива к дублям и выбросам. */
-    private fun baseline(now: Long): Float? {
-        val vals = synchronized(lock) {
-            hrSamples.filter { now - it.first <= BASELINE_WINDOW_MS }.map { it.second }
-        }
-        if (vals.size < BASELINE_MIN_SAMPLES) return null
-        val s = vals.sorted()
-        val mid = s.size / 2
-        return if (s.size % 2 == 1) s[mid] else (s[mid - 1] + s[mid]) / 2f
+    private fun baseline(now: Long): Float? = synchronized(lock) {
+        ArousalMath.baseline(hrSamples, now)
     }
 
     // ---------- срабатывание ----------
