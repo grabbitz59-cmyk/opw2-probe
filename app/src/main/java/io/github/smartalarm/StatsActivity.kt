@@ -34,6 +34,8 @@ class StatsActivity : ComponentActivity() {
     private val timeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
         .withZone(ZoneId.systemDefault())
 
+    private val screenW: Float get() = resources.displayMetrics.widthPixels.toFloat()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
@@ -72,8 +74,8 @@ class StatsActivity : ComponentActivity() {
                     dragging = true
                 }
                 if (dragging) {
-                    contentView.translationX = dx.coerceIn(0f, width.toFloat())
-                    contentView.alpha = 1f - 0.25f * (contentView.translationX / width)
+                    contentView.translationX = dx.coerceIn(0f, screenW)
+                    contentView.alpha = 1f - 0.25f * (contentView.translationX / screenW)
                     return true
                 }
             }
@@ -84,7 +86,7 @@ class StatsActivity : ComponentActivity() {
                     dragging = false
                     if (dx >= 90f) {
                         contentView.animate()
-                            .translationX(width.toFloat())
+                            .translationX(screenW)
                             .alpha(0.35f)
                             .setDuration(140L)
                             .withEndAction {

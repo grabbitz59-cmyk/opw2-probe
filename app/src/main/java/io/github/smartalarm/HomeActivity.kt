@@ -58,6 +58,8 @@ class HomeActivity : ComponentActivity() {
         if (missingPerms().isEmpty()) statusView.text = "разрешения выданы"
     }
 
+    private val screenW: Float get() = resources.displayMetrics.widthPixels.toFloat()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppCtx.init(applicationContext)
@@ -236,8 +238,8 @@ class HomeActivity : ComponentActivity() {
                     dragging = true
                 }
                 if (dragging) {
-                    rootFrame.translationX = dx.coerceIn(-width.toFloat(), 0f)
-                    rootFrame.alpha = 1f - 0.25f * (-rootFrame.translationX / width)
+                    rootFrame.translationX = dx.coerceIn(-screenW, 0f)
+                    rootFrame.alpha = 1f - 0.25f * (-rootFrame.translationX / screenW)
                     return true
                 }
             }
@@ -261,7 +263,7 @@ class HomeActivity : ComponentActivity() {
     /** Доводим экран влево и открываем историю со слайд-переходом, как в оболочке. */
     private fun openStatsWithSlide() {
         rootFrame.animate()
-            .translationX(-width.toFloat())
+            .translationX(-screenW)
             .alpha(0.35f)
             .setDuration(140L)
             .withEndAction {
