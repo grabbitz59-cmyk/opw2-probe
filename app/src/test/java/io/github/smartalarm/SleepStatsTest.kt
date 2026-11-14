@@ -123,6 +123,35 @@ class SleepStatsTest {
     }
 
     @Test
+    fun `stage classification uses motion and hr median`() {
+        val quietLow = SleepStats.parseLine(line(ts = 0L, hr = 50))!!
+        assertEquals(SleepStats.Stage.DEEP, SleepStats.stageOf(quietLow, hrMedian = 60))
+        val quietNormal = SleepStats.parseLine(line(ts = 0L, hr = 60))!!
+        assertEquals(SleepStats.Stage.LIGHT, SleepStats.stageOf(quietNormal, hrMedian = 60))
+        val moving = SleepStats.parseLine(
+            line(ts = 0L, hr = 60, moves = 60, std = 1.5, p2p = 10.0),
+        )!!
+        assertEquals(SleepStats.Stage.AWAKE, SleepStats.stageOf(moving, hrMedian = 60))
+        val noHr = SleepStats.parseLine(line(ts = 0L, hr = 0))!!
+        assertEquals(SleepStats.Stage.UNKNOWN, SleepStats.stageOf(noHr, hrMedian = 60))
+    }
+
+    @Test
+    fun `summary reports phases and efficiency`() {
+        val rows = (0 until 20).map { i ->
+            SleepStats.parseLine(line(ts = i * 30_000L, hr = if (i < 10) 50 else 70))!!
+        }
+        val n = SleepStats.summarize(rows)!!
+        assertEquals(20, n.stages.size)
+        assertTrue("глубокий есть", n.deepMin > 0)
+        assertTrue("лёгкий есть", n.lightMin > 0)
+        assertTrue("эффективность в диапазоне", n.efficiencyPct in 0.0..100.0)
+        val bucketMin = (SleepStats.BUCKET_MS / 60_000L).toInt()
+        val unknown = n.stages.count { it == SleepStats.Stage.UNKNOWN } * bucketMin
+        assertEquals(20 * bucketMin, n.deepMin + n.lightMin + n.awakeMin + unknown)
+    }
+
+    @Test
     fun `alarm fired is detected`() {
         val rows = (0 until 4).map {
             SleepStats.parseLine(line(ts = it * 30_000L, alarm = if (it >= 2) "triggered" else "armed"))!!

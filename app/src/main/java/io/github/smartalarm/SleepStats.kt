@@ -1,17 +1,22 @@
 package io.github.smartalarm
 
 /**
- * Разбор и агрегация ночного CSV (без Android — покрыто JVM-тестами).
+ * Разбор и агрегация ночного CSV + оценка «фаз» по доступным данным.
  *
- * Формат строки от [NightLogService]:
- * ts,epoch_ms,mode,battery_pct,charging,batt_temp_c,screen_on,doze,hr_bpm,hr_age_s,
- * acc_n,acc_mean,acc_std,acc_p2p,moves,hr_samples,uptime_s,hr_source,saw_asleep,alarm_state
+ * Важно: настоящих фаз (N1/N2/N3/REM) на OPW2 получить нельзя — нет HRV (сырой PPG
+ * не содержит кардиокомпоненты) и нет системного сна наружу. Поэтому фазы здесь
+ * **выведенные**: бодрствование по движению, глубокий/лёгкий сон по уровню пульса
+ * относительно ночной медианы. На графике это полосы, как в OHealth, но подписаны
+ * как оценочные.
  */
 object SleepStats {
 
     const val BUCKET_MS = 30_000L
-    private const val QUIET_BREAK_MS = 5 * 60_000L     // разрыв, который делит эпизоды движения
-    private const val MIN_EPISODE_BUCKETS = 2          // короче — это микродвижение, не пробуждение
+    private const val QUIET_BREAK_MS = 5 * 60_000L
+    private const val MIN_EPISODE_BUCKETS = 2
+    private const val DEEP_HR_FACTOR = 0.96f   // ниже медианы на 4 % — «глубже»
+
+    enum class Stage { AWAKE, LIGHT, DEEP, UNKNOWN }
 
     data class Row(
         val ts: Long,
@@ -42,7 +47,18 @@ object SleepStats {
         val batteryEnd: Int,
         val alarmFired: Boolean,
         val series: List<Row>,
-    )
+        // Новые показатели
+        val stages: List<Stage>,
+        val deepMin: Int,
+        val lightMin: Int,
+        val awakeMin: Int,
+        val efficiencyPct: Double,
+        val longestQuietMin: Int,
+        val firstSampleTs: Long,
+        val lastSampleTs: Long,
+    ) {
+        val durationMin: Int get() = ((endTs - startTs) / 60_000L).toInt()
+    }
 
     fun parseLine(line: String): Row? {
         if (line.isBlank() || line.startsWith("#")) return null
@@ -68,23 +84,17 @@ object SleepStats {
 
     fun parse(lines: List<String>): List<Row> = lines.mapNotNull { parseLine(it) }
 
-    /** Движение в окне — та же формула, что и в [ArousalMath]. */
     fun isMotion(row: Row): Boolean =
         ArousalMath.isMotion(row.n, row.moves, row.std, row.p2p)
 
-    /**
-     * Пробуждения: эпизоды движения длиной не меньше [MIN_EPISODE_BUCKETS] окон,
-     * разделённые хотя бы [QUIET_BREAK_MS] тишины. Микровздрагивания не считаем.
-     */
+    /** Бодрствование: эпизоды движения ≥2 окон через ≥5 минут тишины. */
     fun awakenings(rows: List<Row>): Int {
         var count = 0
         var run = 0
         var lastMotionTs = 0L
         for (r in rows) {
             if (isMotion(r)) {
-                if (run == 0 && lastMotionTs > 0 && r.ts - lastMotionTs < QUIET_BREAK_MS) {
-                    run = 1 // продолжение эпизода после короткой паузы
-                }
+                if (run == 0 && lastMotionTs > 0 && r.ts - lastMotionTs < QUIET_BREAK_MS) run = 1
                 run++
                 lastMotionTs = r.ts
             } else {
@@ -104,6 +114,31 @@ object SleepStats {
         val coverage = 100.0 * rows.size / durationBuckets
 
         val hrValues = rows.map { it.hr }.filter { it > 0 }
+        val hrMedian = hrValues.sorted().let {
+            if (it.isEmpty()) 0 else if (it.size % 2 == 1) it[it.size / 2] else (it[it.size / 2 - 1] + it[it.size / 2]) / 2
+        }
+        val stages = rows.map { stageOf(it, hrMedian) }
+        val bucketMin = (bucketMs / 60_000L).toInt().coerceAtLeast(1)
+
+        val deepMin = stages.count { it == Stage.DEEP } * bucketMin
+        val lightMin = stages.count { it == Stage.LIGHT } * bucketMin
+        val awakeMin = stages.count { it == Stage.AWAKE } * bucketMin
+        val trackedMin = deepMin + lightMin + awakeMin
+        val efficiency = if (trackedMin == 0) 0.0 else 100.0 * (deepMin + lightMin) / trackedMin
+
+        // самый длинный непрерывный спокойный отрезок (не движение)
+        var longestMs = 0L
+        var runStart = -1L
+        for (r in rows) {
+            if (isMotion(r)) {
+                if (runStart > 0) longestMs = maxOf(longestMs, r.ts - runStart)
+                runStart = -1L
+            } else if (runStart < 0) {
+                runStart = r.ts
+            }
+        }
+        if (runStart > 0) longestMs = maxOf(longestMs, rows.last().ts - runStart)
+
         val motionCount = rows.count { isMotion(it) }
         val asleepCount = rows.count { it.asleep }
         val firstPct = rows.firstOrNull { it.pct in 0..100 }?.pct ?: -1
@@ -119,16 +154,31 @@ object SleepStats {
             hrMax = hrValues.maxOrNull() ?: -1,
             hrWindows = hrValues.size,
             awakenings = awakenings(rows),
-            asleepPct = 100.0 * asleepCount / rows.size,
+            asleepPct = if (rows.isEmpty()) 0.0 else 100.0 * asleepCount / rows.size,
             motionPct = 100.0 * motionCount / rows.size,
             batteryStart = firstPct,
             batteryEnd = lastPct,
             alarmFired = rows.any { it.alarmState == "triggered" },
             series = rows,
+            stages = stages,
+            deepMin = deepMin,
+            lightMin = lightMin,
+            awakeMin = awakeMin,
+            efficiencyPct = efficiency,
+            longestQuietMin = (longestMs / 60_000L).toInt(),
+            firstSampleTs = rows.firstOrNull { it.hr > 0 }?.ts ?: start,
+            lastSampleTs = rows.lastOrNull { it.hr > 0 }?.ts ?: end,
         )
     }
 
-    /** Насколько свежим был пульс: доля окон с валидным HR. */
+    /** Оценочная фаза: движение → бодрствование, иначе по пульсу относительно медианы. */
+    fun stageOf(row: Row, hrMedian: Int): Stage {
+        if (isMotion(row)) return Stage.AWAKE
+        if (row.hr <= 0) return Stage.UNKNOWN
+        if (hrMedian > 0 && row.hr <= hrMedian * DEEP_HR_FACTOR) return Stage.DEEP
+        return Stage.LIGHT
+    }
+
     fun hrCoveragePct(night: Night): Double =
         if (night.rows == 0) 0.0 else 100.0 * night.hrWindows / night.rows
 }

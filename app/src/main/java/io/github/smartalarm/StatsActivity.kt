@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -26,6 +27,8 @@ class StatsActivity : ComponentActivity() {
 
     private lateinit var chart: SleepChartView
     private lateinit var summaryView: TextView
+    private lateinit var phasesView: TextView
+    private lateinit var efficiencyView: TextView
     private lateinit var fileView: TextView
 
     private val timeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
@@ -61,6 +64,22 @@ class StatsActivity : ComponentActivity() {
             setLineSpacing(dp(1).toFloat(), 1f)
         }
         root.addView(summaryView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+
+        phasesView = text("", 9f, Ui.ACCENT).apply {
+            gravity = Gravity.START
+            setPadding(dp(2), dp(3), dp(2), 0)
+        }
+        root.addView(phasesView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+
+        efficiencyView = text("", 9f, Ui.TEXT_SECONDARY).apply {
+            gravity = Gravity.START
+            setPadding(dp(2), dp(1), dp(2), 0)
+        }
+        root.addView(efficiencyView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
@@ -137,6 +156,17 @@ class StatsActivity : ComponentActivity() {
         sb.appendLine("Батарея: $battery" + if (n.alarmFired) " · будильник сработал" else "")
         summaryView.text = sb.toString().trim()
 
+        // Оценка фаз по пульсу и движению (не медицинские N1/N2/N3/REM — см. SleepStats)
+        phasesView.text = buildString {
+            append("≈ глубокий ").append(hm(n.deepMin))
+            append(" · лёгкий ").append(hm(n.lightMin))
+            append(" · бодрств. ").append(hm(n.awakeMin))
+        }
+        efficiencyView.text = buildString {
+            append("Эффективность ").append(n.efficiencyPct.toInt()).append('%')
+            append(" · самый спокойный отрезок ").append(hm(n.longestQuietMin))
+        }
+
         // Честная метрика качества данных: низкое покрытие = ночь не записана
         summaryView.append(
             "\nПокрытие лога: ${n.coveragePct.toInt()}%" +
@@ -145,6 +175,9 @@ class StatsActivity : ComponentActivity() {
 
         fileView.text = "файл: ${file.name}"
     }
+
+    private fun hm(minutes: Int): String =
+        if (minutes < 60) "${minutes}м" else "${minutes / 60}ч ${minutes % 60}м"
 
     /**
      * Берём самый ИНФОРМАТИВНЫЙ файл, а не самый свежий: после коротких тестовых

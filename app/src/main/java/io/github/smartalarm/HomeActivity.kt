@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewGroup
@@ -208,6 +209,31 @@ class HomeActivity : ComponentActivity() {
         cap(cta, 240f)
     }
 
+
+    // ---------- свайп между экранами (R11) ----------
+    private var swipeDownX = 0f
+    private var swipeDownY = 0f
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                swipeDownX = ev.x
+                swipeDownY = ev.y
+            }
+            MotionEvent.ACTION_UP -> {
+                val dx = ev.x - swipeDownX
+                val dy = ev.y - swipeDownY
+                // Свайп из центра экрана; от левого края жест оставляем системе («назад»).
+                if (swipeDownX > 70f && kotlin.math.abs(dx) >= 90f &&
+                    kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f
+                ) {
+                    startActivity(Intent(this, StatsActivity::class.java)); overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out)
+                    return true
+                }
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
     // ---------- состояние ----------
 
     private fun refresh() {
