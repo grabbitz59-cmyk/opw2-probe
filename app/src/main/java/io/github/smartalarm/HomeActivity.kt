@@ -244,11 +244,20 @@ class HomeActivity : ComponentActivity() {
                 }
             }
 
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
                 if (dragging) {
                     val dx = ev.x - swipeDownX
                     dragging = false
                     if (dx <= -90f) openStatsWithSlide() else snapBack()
+                    return true
+                }
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                // Жест отменён системой — экран возвращаем на место, никуда не уходим
+                if (dragging) {
+                    dragging = false
+                    snapBack()
                     return true
                 }
             }

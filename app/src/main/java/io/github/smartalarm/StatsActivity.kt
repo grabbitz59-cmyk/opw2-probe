@@ -80,7 +80,7 @@ class StatsActivity : ComponentActivity() {
                 }
             }
 
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+            MotionEvent.ACTION_UP -> {
                 if (dragging) {
                     val dx = ev.x - swipeDownX
                     dragging = false
@@ -97,6 +97,15 @@ class StatsActivity : ComponentActivity() {
                     } else {
                         contentView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
                     }
+                    return true
+                }
+            }
+
+            MotionEvent.ACTION_CANCEL -> {
+                // Отмена жеста — возвращаем контент на место, экран не закрываем
+                if (dragging) {
+                    dragging = false
+                    contentView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
                     return true
                 }
             }
