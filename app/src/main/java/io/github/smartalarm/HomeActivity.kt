@@ -37,6 +37,7 @@ class HomeActivity : ComponentActivity() {
     private lateinit var windowPill: TextView
     private lateinit var cta: TextView
     private lateinit var rootFrame: FrameLayout
+    private lateinit var pager: CyclePager
     private var ambient: AmbientLifecycleObserver? = null
 
     private var hour = 7
@@ -134,7 +135,7 @@ class HomeActivity : ComponentActivity() {
         dial = DialView(this).apply {
             setOnClickListener { openSetup() }
             setOnLongClickListener {
-                startActivity(Intent(this@HomeActivity, StatsActivity::class.java))
+                pager.showPage(1)
                 true
             }
         }
@@ -189,18 +190,13 @@ class HomeActivity : ComponentActivity() {
         }
         root.addView(cta, overlay(topPx = 314, heightPx = 88))
 
-        // Циклическая прокрутка (R11–R13) через контейнер-перехватчик
-        val wrap = SwipeWrapLayout(this)
-        wrap.addView(root)
-        wrap.onDrag = { dx ->
-            rootFrame.translationX = dx
-            rootFrame.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
-        }
-        wrap.onCommit = { dx ->
-            if (kotlin.math.abs(dx) >= 90f) openStatsWithSlide(dx < 0) else snapBack()
-        }
-        wrap.onCancel = { snapBack() }
-        setContentView(wrap)
+        // Карусель разделов: влево — следующая страница, после последней снова первая
+        val statsPage = StatsPageView(this)
+        pager = CyclePager(this)
+        pager.addPage(root)
+        pager.addPage(statsPage)
+        pager.onPageChanged = { idx -> if (idx == 1) statsPage.reload() }
+        setContentView(pager)
         root.post { applyGeometry(root) }
     }
 
