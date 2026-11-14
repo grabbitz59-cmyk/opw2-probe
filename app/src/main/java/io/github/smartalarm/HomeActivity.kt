@@ -135,7 +135,12 @@ class HomeActivity : ComponentActivity() {
         dial = DialView(this).apply {
             setOnClickListener { openSetup() }
             setOnLongClickListener {
-                pager.showPage(1)
+                // Долгое нажатие по циферблату — история ночи (вторая страница карусели)
+                if (::pager.isInitialized) {
+                    pager.showPage(1)
+                } else {
+                    openStats()
+                }
                 true
             }
         }
@@ -190,35 +195,21 @@ class HomeActivity : ComponentActivity() {
         }
         root.addView(cta, overlay(topPx = 314, heightPx = 88))
 
-        // Листание разделов: свайп влево открывает историю ночи (проверенный и стабильный путь).
-        // Карусель (CarouselPager) отложена: после первого перехода приложение перестаёт
-        // принимать жесты — трассировка показывает, что drag больше не начинается.
-        setContentView(root)
+        // Бесконечная карусель разделов: влево листает дальше, после последней — снова первая.
+        // Обе страницы всегда видимы, двигаются только по x (GONE ломал доставку касаний).
+        val statsPage = StatsPageView(this)
+        pager = CarouselPager(this)
+        pager.addPage(root)
+        pager.addPage(statsPage)
+        pager.onPageChanged = { idx -> if (idx == 1) statsPage.reload() }
+        setContentView(pager)
         root.post { applyGeometry(root) }
     }
 
-    // ---------- листание разделов (R11–R12) ----------
-    private var swipeDownX = 0f
-    private var swipeDownY = 0f
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                swipeDownX = ev.x
-                swipeDownY = ev.y
-            }
-
-            MotionEvent.ACTION_UP -> {
-                val dx = ev.x - swipeDownX
-                val dy = ev.y - swipeDownY
-                if (swipeDownX > 90f && dx <= -90f && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f) {
-                    startActivity(Intent(this, StatsActivity::class.java))
-                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
-                    return true
-                }
-            }
-        }
-        return super.dispatchTouchEvent(ev)
+    /** Открыть историю ночи отдельным экраном (запасной путь, если карусель недоступна). */
+    private fun openStats() {
+        startActivity(Intent(this, StatsActivity::class.java))
+        overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
     }
 
     private fun overlay(topPx: Int, heightPx: Int): FrameLayout.LayoutParams =
