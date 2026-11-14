@@ -37,7 +37,6 @@ class HomeActivity : ComponentActivity() {
     private lateinit var windowPill: TextView
     private lateinit var cta: TextView
     private lateinit var rootFrame: FrameLayout
-    private lateinit var pager: CarouselPager
     private var ambient: AmbientLifecycleObserver? = null
 
     private var hour = 7
@@ -135,7 +134,8 @@ class HomeActivity : ComponentActivity() {
         dial = DialView(this).apply {
             setOnClickListener { openSetup() }
             setOnLongClickListener {
-                pager.showPage(1)
+                startActivity(Intent(this@HomeActivity, StatsActivity::class.java))
+                overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
                 true
             }
         }

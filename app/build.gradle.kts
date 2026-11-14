@@ -16,8 +16,8 @@ android {
         applicationId = "io.github.smartalarm"
         minSdk = 30
         targetSdk = 34
-        versionCode = 51
-        versionName = "1.41-carousel-dbg"
+        versionCode = 52
+        versionName = "1.42-snooze"
     }
 
     signingConfigs {
