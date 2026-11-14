@@ -65,6 +65,11 @@ class HomeActivity : ComponentActivity() {
         windowMin = Prefs.windowMin(this)
         buildUi()
         setupAmbient()
+        // Отладка: adb shell am start -n io.github.smartalarm/.HomeActivity --ez force_ambient true
+        // Позволяет увидеть ambient-отрисовку даже при выключенном AOD на устройстве.
+        if (intent?.getBooleanExtra("force_ambient", false) == true) {
+            handler.postDelayed({ applyAmbient(true) }, 400L)
+        }
     }
 
     /**
