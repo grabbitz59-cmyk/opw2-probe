@@ -17,6 +17,9 @@ class AlarmTestReceiver : BroadcastReceiver() {
         // иначе вибрация запускалась дважды и в alarm_fired.txt было две записи.
         if (!AlarmLogic.markFired()) return
 
+        // Фиксируем фазу сна, в которой будильник поднял человека (HR + недавнее движение)
+        AlarmLogic.recordWakePhase(context, "alarm fired")
+
         val now = System.currentTimeMillis()
         try {
             val dir = context.getExternalFilesDir(null) ?: context.filesDir
@@ -101,6 +104,7 @@ class StopAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         AlarmPlayer.stop(context)
         // Остановка из уведомления тоже учитывает повтор по дням
+        AlarmLogic.recordStopPhase(context)
         AlarmLogic.onAlarmStopped(context)
     }
 }
@@ -153,6 +157,7 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
             textSize = 16f
             isAllCaps = false
             setOnClickListener {
+                AlarmLogic.recordStopPhase(this@AlarmActivity)
                 AlarmLogic.snooze(this@AlarmActivity)
                 AlarmPlayer.stop(this@AlarmActivity)
                 finish()
@@ -199,6 +204,7 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
     private fun finishAlarm() {
         AlarmPlayer.stop(this)
         // Повтор включён → взводим на следующий день, иначе снимаем
+        AlarmLogic.recordStopPhase(this)
         AlarmLogic.onAlarmStopped(this)
         finish()
     }
@@ -215,6 +221,7 @@ class AlarmActivity : androidx.activity.ComponentActivity() {
 class SnoozeAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         AlarmPlayer.stop(context)
+        AlarmLogic.recordStopPhase(context)
         AlarmLogic.snooze(context)
         (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .cancel(AlarmPlayer.ALARM_NOTIFICATION_ID)
