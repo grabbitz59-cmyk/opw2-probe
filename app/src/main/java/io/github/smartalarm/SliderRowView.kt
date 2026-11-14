@@ -54,6 +54,14 @@ class SliderRowView @JvmOverloads constructor(
     private val padH = 6f
     private val knobR = 14f
 
+    private var downX = 0f
+    private var downY = 0f
+    private var startValue = 0
+    private var dragging = false
+
+    /** Полный диапазон значений за столько пикселей вертикального хода. */
+    private val verticalSpanPx = 130f
+
     private fun fraction(): Float {
         val range = (maxValue - minValue).coerceAtLeast(1)
         return (value - minValue).toFloat() / range
@@ -82,20 +90,49 @@ class SliderRowView @JvmOverloads constructor(
         canvas.drawCircle(x, cy, knobR, knobPaint)
     }
 
-    private fun labelFor(v: Int): String =
-        if (maxValue > 23) String.format(java.util.Locale.US, "%02d", v)
-        else String.format(java.util.Locale.US, "%02d", v)
+    private fun labelFor(v: Int): String = String.format(java.util.Locale.US, "%02d", v)
 
+    /**
+     * Управление без горизонтального свайпа: он на Wear OS перехватывается системным
+     * жестом «назад» и закрывает экран. Поэтому:
+     *  - тап по шкале — сразу нужное значение (позиция X);
+     *  - вертикальное движение пальцем — точная подстройка (вверх больше, вниз меньше).
+     */
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                applyX(event.x)
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                startValue = value
+                dragging = false
                 return true
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                applyX(event.x)
+
+            MotionEvent.ACTION_MOVE -> {
+                val dy = downY - event.y
+                val dx = kotlin.math.abs(event.x - downX)
+                if (!dragging && kotlin.math.abs(dy) > 12f && kotlin.math.abs(dy) > dx) {
+                    dragging = true
+                }
+                if (dragging) {
+                    val range = (maxValue - minValue).coerceAtLeast(1)
+                    val stepFloat = dy / verticalSpanPx * range
+                    val raw = startValue + (stepFloat / step).toInt() * step
+                    val snapped = raw.coerceIn(minValue, maxValue)
+                    if (snapped != value) {
+                        value = snapped
+                        onChange?.invoke(snapped)
+                    }
+                }
                 return true
             }
+
+            MotionEvent.ACTION_UP -> {
+                if (!dragging) applyX(event.x)
+                return true
+            }
+
+            MotionEvent.ACTION_CANCEL -> return true
         }
         return super.onTouchEvent(event)
     }

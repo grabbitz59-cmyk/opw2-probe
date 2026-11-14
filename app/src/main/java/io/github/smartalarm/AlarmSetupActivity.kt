@@ -37,7 +37,7 @@ class AlarmSetupActivity : ComponentActivity() {
     private fun buildUi() {
         val root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
 
-        root.addView(label("БУДИЛЬНИК"), at(topPx = 44, heightPx = 22))
+        root.addView(label("БУДИЛЬНИК · ТАП И ТЯНИ ↑↓"), at(topPx = 44, heightPx = 22))
 
         timeView = TextView(this).apply {
             typeface = Ui.clockTypeface()
