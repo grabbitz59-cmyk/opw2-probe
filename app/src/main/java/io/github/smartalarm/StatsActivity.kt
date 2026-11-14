@@ -209,11 +209,11 @@ class StatsActivity : ComponentActivity() {
             addView(
                 PageDotsView(this@StatsActivity).apply { setPage(1, 3) },
                 android.widget.FrameLayout.LayoutParams(
-                    (90 * resources.displayMetrics.density).toInt(),
-                    (18 * resources.displayMetrics.density).toInt(),
+                    (60 * resources.displayMetrics.density).toInt(),
+                    (10 * resources.displayMetrics.density).toInt(),
                 ).apply {
                     gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                    bottomMargin = (26 * resources.displayMetrics.density).toInt()
+                    bottomMargin = (20 * resources.displayMetrics.density).toInt()
                 },
             )
         }

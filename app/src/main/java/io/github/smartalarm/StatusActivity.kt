@@ -173,11 +173,11 @@ class StatusActivity : ComponentActivity() {
             addView(
                 PageDotsView(this@StatusActivity).apply { setPage(2, 3) },
                 android.widget.FrameLayout.LayoutParams(
-                    (90 * resources.displayMetrics.density).toInt(),
-                    (18 * resources.displayMetrics.density).toInt(),
+                    (60 * resources.displayMetrics.density).toInt(),
+                    (10 * resources.displayMetrics.density).toInt(),
                 ).apply {
                     gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                    bottomMargin = (26 * resources.displayMetrics.density).toInt()
+                    bottomMargin = (20 * resources.displayMetrics.density).toInt()
                 },
             )
         }
