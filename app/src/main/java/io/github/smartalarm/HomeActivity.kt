@@ -319,6 +319,15 @@ class HomeActivity : ComponentActivity() {
             startService(svc)
         } catch (_: Throwable) {
         }
+        // Страховка: даже если сервис уже не запущен, снимаем passive-мониторинг,
+        // иначе PPG-датчик (зелёный диод) продолжает мерить пульс.
+        val ctx = applicationContext
+        Thread {
+            try {
+                HealthPassive.stop(ctx)
+            } catch (_: Throwable) {
+            }
+        }.start()
         handler.postDelayed({ refresh() }, 1_200L)
     }
 

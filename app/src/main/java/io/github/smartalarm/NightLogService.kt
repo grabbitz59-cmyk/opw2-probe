@@ -137,7 +137,17 @@ class NightLogService : Service(), SensorEventListener {
         startedAt = System.currentTimeMillis()
         if (intent?.action == ACTION_STOP) {
             Prefs.setRunning(this, false)
-            stopSelf()
+            // Критично: снимаем passive-мониторинг Health Services, иначе зелёный
+            // PPG-датчик продолжает мерить пульс ~1 раз в секунду после остановки лога
+            // (наблюдали 16+ минут непрерывного свечения после «стоп»).
+            val ctx = applicationContext
+            Thread {
+                try {
+                    HealthPassive.stop(ctx)
+                } catch (_: Throwable) {
+                }
+                stopSelf()
+            }.start()
             return START_NOT_STICKY
         }
         // Heartbeat: система разбудила приложение — сбрасываем бакет немедленно.

@@ -62,20 +62,29 @@ object RawPpg {
         }
 
         var registered = 0
-        for (s in sensors) {
-            if (sm.registerListener(listener, s, 20_000, handler)) registered++
-        }
-        if (registered == 0) {
+        try {
+            for (s in sensors) {
+                if (sm.registerListener(listener, s, 20_000, handler)) registered++
+            }
+            if (registered == 0) {
+                return "Ни один PPG_RAW сенсор не открылся"
+            }
+            handler.postDelayed({ latch.countDown() }, durationMs)
+            latch.await(durationMs + 10_000, TimeUnit.MILLISECONDS)
+        } finally {
+            // finally, а не «после await»: при interrupt/остановке сервиса иначе
+            // остаётся висеть регистрация PPG и зелёный светодиод горит до смерти процесса.
+            try {
+                sm.unregisterListener(listener)
+            } catch (_: Throwable) {
+            }
             thread.quitSafely()
-            try { w.close() } catch (_: Throwable) {}
-            return "Ни один PPG_RAW сенсор не открылся"
+            try {
+                w.flush()
+                w.close()
+            } catch (_: Throwable) {
+            }
         }
-
-        handler.postDelayed({ latch.countDown() }, durationMs)
-        latch.await(durationMs + 10_000, TimeUnit.MILLISECONDS)
-        sm.unregisterListener(listener)
-        thread.quitSafely()
-        try { w.flush(); w.close() } catch (_: Throwable) {}
 
         val sb = StringBuilder()
         sb.appendLine("Файл: ${file.absolutePath}")
