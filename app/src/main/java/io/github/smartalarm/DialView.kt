@@ -1,5 +1,6 @@
 package io.github.smartalarm
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -8,13 +9,15 @@ import android.graphics.RectF
 import android.graphics.SweepGradient
 import android.util.AttributeSet
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 
 /**
- * Кольцо прогресса на весь экран + время в центре (стиль вендорского циферблата).
+ * Кольцо прогресса на весь экран + время в центре.
  *
- * Скилл wear-os-ui: кольцо рисуется с отступом [RoundScreen.SAFE_MARGIN_PX] от края,
- * поэтому оно никогда не обрезается дугой экрана; время стоит выше геометрического
- * центра, чтобы под ним поместились статус и кнопки.
+ * Поддерживает два состояния по скиллу wear-os-ui:
+ *  - обычное: полное кольцо с градиентом, точка на конце, пульсация при записи;
+ *  - **ambient (R9)**: только приглушённые кольцо и время, без градиента и пульсации,
+ *    чтобы не выжигать AMOLED и не тратить батарею на AOD.
  */
 class DialView @JvmOverloads constructor(
     context: Context,
@@ -46,9 +49,70 @@ class DialView @JvmOverloads constructor(
     var armed: Boolean = false
         set(v) { field = v; invalidate() }
     var running: Boolean = false
-        set(v) { field = v; invalidate() }
+        set(v) {
+            field = v
+            setPulse(v)
+            invalidate()
+        }
     var timeLabel: String = "07:00"
         set(v) { field = v; invalidate() }
+
+    /** Ambient/AOD: приглушённая отрисовка без анимаций. */
+    private var dimmed = false
+
+    /** Анимация «наполнения» кольца при взведении. */
+    private var fillFraction = 1f
+    private var animator: ValueAnimator? = null
+    private var pulseAnimator: ValueAnimator? = null
+    private var pulse = 0f
+
+    fun setDimmed(on: Boolean) {
+        dimmed = on
+        if (on) {
+            pulseAnimator?.cancel()
+            pulseAnimator = null
+            pulse = 0f
+        } else {
+            setPulse(running)
+        }
+        invalidate()
+    }
+
+    /** Запускает анимацию кольца от нуля до текущего прогресса. */
+    fun animateRing() {
+        if (dimmed) return
+        animator?.cancel()
+        fillFraction = 0f
+        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 700L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener {
+                fillFraction = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
+
+    private fun setPulse(on: Boolean) {
+        if (!on || dimmed) {
+            pulseAnimator?.cancel()
+            pulseAnimator = null
+            pulse = 0f
+            return
+        }
+        if (pulseAnimator?.isRunning == true) return
+        pulseAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1400L
+            repeatCount = ValueAnimator.INFINITE
+            repeatMode = ValueAnimator.REVERSE
+            addUpdateListener {
+                pulse = it.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+    }
 
     private fun progress(): Float {
         if (!armed || targetAt <= 0L) return 0f
@@ -62,40 +126,53 @@ class DialView @JvmOverloads constructor(
         val h = height.toFloat()
         val cx = w / 2f
         val cy = h / 2f
-        val stroke = (minOf(w, h) * 0.035f).coerceAtLeast(3f)
-        val radius = minOf(w, h) / 2f - RoundScreen.SAFE_MARGIN_PX - stroke / 2f
+        val base = minOf(w, h)
+        val stroke = (base * if (dimmed) 0.028f else 0.035f).coerceAtLeast(3f)
+        val radius = base / 2f - RoundScreen.SAFE_MARGIN_PX - stroke / 2f
         arcRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
 
         ringBg.strokeWidth = stroke
+        ringBg.color = if (dimmed) Color.parseColor("#141C1F") else Ui.surfaceHi
         ringArc.strokeWidth = stroke
         canvas.drawCircle(cx, cy, radius, ringBg)
 
-        val p = progress()
+        val p = progress() * fillFraction
         if (p > 0f) {
-            ringArc.shader = SweepGradient(
-                cx, cy,
-                intArrayOf(
-                    Color.parseColor("#0A3D35"), Ui.accentDim, Ui.accent,
-                    Color.parseColor("#0A3D35"),
-                ),
-                floatArrayOf(0f, 0.35f, 0.75f, 1f),
-            )
-            canvas.drawArc(arcRect, -90f, 360f * p, false, ringArc)
-            ringArc.shader = null
+            if (dimmed) {
+                ringArc.color = Ui.accentDim
+                canvas.drawArc(arcRect, -90f, 360f * p, false, ringArc)
+            } else {
+                ringArc.shader = SweepGradient(
+                    cx, cy,
+                    intArrayOf(
+                        Color.parseColor("#0A3D35"), Ui.accentDim, Ui.accent,
+                        Color.parseColor("#0A3D35"),
+                    ),
+                    floatArrayOf(0f, 0.35f, 0.75f, 1f),
+                )
+                canvas.drawArc(arcRect, -90f, 360f * p, false, ringArc)
+                ringArc.shader = null
 
-            val angle = Math.toRadians((-90f + 360f * p).toDouble())
-            dotPaint.color = if (running) Ui.accent else Ui.accentDim
-            canvas.drawCircle(
-                cx + radius * Math.cos(angle).toFloat(),
-                cy + radius * Math.sin(angle).toFloat(),
-                stroke * 1.1f,
-                dotPaint,
-            )
+                val angle = Math.toRadians((-90f + 360f * p).toDouble())
+                dotPaint.color = if (running) Ui.accent else Ui.accentDim
+                canvas.drawCircle(
+                    cx + radius * Math.cos(angle).toFloat(),
+                    cy + radius * Math.sin(angle).toFloat(),
+                    stroke * (0.8f + 0.9f * pulse),
+                    dotPaint,
+                )
+            }
         }
 
-        // Время выше центра: под ним живут статус и кнопки
-        val timeSize = (minOf(w, h) * 0.205f).coerceAtLeast(28f)
+        val timeSize = (base * if (dimmed) 0.185f else 0.205f).coerceAtLeast(26f)
         timePaint.textSize = timeSize
-        canvas.drawText(timeLabel, cx, cy - minOf(w, h) * 0.055f, timePaint)
+        timePaint.color = if (dimmed) Ui.textSecondary else Ui.text
+        canvas.drawText(timeLabel, cx, cy - base * 0.055f, timePaint)
+    }
+
+    override fun onDetachedFromWindow() {
+        animator?.cancel()
+        pulseAnimator?.cancel()
+        super.onDetachedFromWindow()
     }
 }

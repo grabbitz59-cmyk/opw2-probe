@@ -16,8 +16,8 @@ android {
         applicationId = "io.github.smartalarm"
         minSdk = 30
         targetSdk = 34
-        versionCode = 28
-        versionName = "1.18-wear"
+        versionCode = 29
+        versionName = "1.19-ambient"
     }
 
     signingConfigs {
@@ -60,6 +60,8 @@ dependencies {
     implementation("androidx.health:health-services-client:1.1.0")
     implementation("com.google.guava:guava:32.1.3-android")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
+    // Ambient/AOD для экранов на View: AmbientLifecycleObserver
+    implementation("androidx.wear:wear:1.3.0")
 
     // Чистая логика arousal проверяется JVM-тестами, без часов и эмулятора.
     testImplementation("junit:junit:4.13.2")

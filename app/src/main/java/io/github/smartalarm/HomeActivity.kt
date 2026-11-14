@@ -11,12 +11,14 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import androidx.wear.ambient.AmbientLifecycleObserver
 import java.util.Calendar
 import java.util.Locale
 
@@ -33,6 +35,8 @@ class HomeActivity : ComponentActivity() {
     private lateinit var statusView: TextView
     private lateinit var windowPill: TextView
     private lateinit var cta: TextView
+    private lateinit var rootFrame: FrameLayout
+    private var ambient: AmbientLifecycleObserver? = null
 
     private var hour = 7
     private var minute = 0
@@ -60,6 +64,40 @@ class HomeActivity : ComponentActivity() {
         minute = Prefs.targetMinute(this)
         windowMin = Prefs.windowMin(this)
         buildUi()
+        setupAmbient()
+    }
+
+    /**
+     * Ambient (AOD) по скиллу wear-os-ui, R9: в покое остаются только время и кольцо,
+     * без кнопок, градиента и пульсации — так экран не выжигает AMOLED.
+     */
+    private fun setupAmbient() {
+        ambient = AmbientLifecycleObserver(
+            this,
+            object : AmbientLifecycleObserver.AmbientLifecycleCallback {
+                override fun onEnterAmbient(details: AmbientLifecycleObserver.AmbientDetails) {
+                    applyAmbient(true)
+                }
+
+                override fun onUpdateAmbient() {
+                    refresh()
+                    dial.invalidate()
+                }
+
+                override fun onExitAmbient() {
+                    applyAmbient(false)
+                }
+            },
+        )
+    }
+
+    private fun applyAmbient(on: Boolean) {
+        dial.setDimmed(on)
+        statusView.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        windowPill.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        cta.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        rootFrame.setBackgroundColor(if (on) android.graphics.Color.BLACK else Ui.bg)
+        if (!on) dial.animateRing()
     }
 
     override fun onResume() {
@@ -80,6 +118,7 @@ class HomeActivity : ComponentActivity() {
 
     private fun buildUi() {
         val root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
+        rootFrame = root
 
         dial = DialView(this).apply {
             setOnClickListener { openSetup() }
@@ -263,6 +302,7 @@ class HomeActivity : ComponentActivity() {
         Prefs.setTargetMinute(this, minute)
         Prefs.setWindowMin(this, windowMin)
         AlarmLogic.arm(this, at, windowMin)
+        dial.animateRing()
         AlarmLogic.log(this, "home arm ${String.format(Locale.US, "%02d:%02d", hour, minute)} w=$windowMin")
 
         val svc = Intent(this, NightLogService::class.java).apply {
