@@ -128,7 +128,7 @@ class DialView @JvmOverloads constructor(
         val cy = h / 2f
         val base = minOf(w, h)
         val stroke = (base * if (dimmed) 0.028f else 0.035f).coerceAtLeast(3f)
-        val radius = base / 2f - RoundScreen.SAFE_MARGIN_PX - stroke / 2f
+        val radius = base / 2f - RoundScreen.MARGIN_PX - stroke / 2f
         arcRect.set(cx - radius, cy - radius, cx + radius, cy + radius)
 
         ringBg.strokeWidth = stroke
