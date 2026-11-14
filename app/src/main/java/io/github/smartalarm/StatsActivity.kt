@@ -87,7 +87,7 @@ class StatsActivity : ComponentActivity() {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Ui.bg)
-            setPadding(dp(12), dp(8), dp(12), dp(14))
+            setPadding(dp(12), dp(28), dp(12), dp(16))
         }
         outer.addView(
             ScrollView(this).apply {
@@ -98,7 +98,7 @@ class StatsActivity : ComponentActivity() {
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
         )
         outer.addView(close, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(36),
         ).apply { topMargin = dp(4) })
         // Скилл wear-os-ui, R1: контент и кнопка подгоняются под круг
         outer.post {
@@ -108,7 +108,7 @@ class StatsActivity : ComponentActivity() {
             val cy = loc[1] + close.height / 2f
             val sw = resources.displayMetrics.widthPixels.toFloat()
             val sh = resources.displayMetrics.heightPixels.toFloat()
-            val safe = RoundScreen.safeWidth(cy, sw, sh)
+            val safe = RoundScreen.safeRowWidth(loc[1].toFloat(), loc[1] + close.height.toFloat(), sw, sh)
             if (safe > 0f) {
                 val lp = close.layoutParams
                 lp.width = safe.toInt()
