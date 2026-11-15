@@ -65,3 +65,23 @@ class PhaseEstimatorTest {
         assertEquals("бодрствование", PhaseEstimator.label(SleepStats.Stage.AWAKE))
     }
 }
+    @Test
+    fun `stale pulse uses night median instead of giving up`() {
+        // Реальный случай: пульс 63 bpm пришёл 41 минуту назад, медиана за ночь 65
+        assertEquals(
+            SleepStats.Stage.LIGHT,
+            PhaseEstimator.estimate(
+                hrNow = 63f, hrAgeMin = 41f,
+                hrMedianWindow = null, hrMedianSession = 65f, motionRecent = false,
+            ),
+        )
+        // Слишком старый пульс — уже не оцениваем
+        assertEquals(
+            SleepStats.Stage.UNKNOWN,
+            PhaseEstimator.estimate(
+                hrNow = 63f, hrAgeMin = 200f,
+                hrMedianWindow = null, hrMedianSession = 65f, motionRecent = false,
+            ),
+        )
+    }
+}

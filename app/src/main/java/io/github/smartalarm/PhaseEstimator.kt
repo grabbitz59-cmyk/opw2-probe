@@ -18,10 +18,33 @@ object PhaseEstimator {
     /** Считаем «бодрствованием», если движение было не позже этого окна. */
     const val MOTION_RECENT_MS = 2 * 60_000L
 
-    fun estimate(hrNow: Float, hrMedian: Float?, motionRecent: Boolean): SleepStats.Stage {
+    /**
+     * Насколько старым может быть последний пульс, чтобы им ещё можно было оценить фазу.
+     *
+     * Ночью Health Services отдаёт пульс с большими паузами: в реальную ночь последний
+     * сэмпл был за 41 минуту до срабатывания, и без запаса фаза всегда была бы «unknown».
+     */
+    const val MAX_HR_AGE_MIN = 75f
+
+    fun estimate(hrNow: Float, hrMedian: Float?, motionRecent: Boolean): SleepStats.Stage =
+        estimate(hrNow, hrAgeMin = 0f, hrMedian, hrMedian, motionRecent)
+
+    /**
+     * Расширенная оценка: медиана «сейчас» может быть недоступна (мало свежих сэмплов),
+     * тогда берём медиану за всю ночь. Возраст пульса ограничиваем [MAX_HR_AGE_MIN].
+     */
+    fun estimate(
+        hrNow: Float,
+        hrAgeMin: Float,
+        hrMedianWindow: Float?,
+        hrMedianSession: Float?,
+        motionRecent: Boolean,
+    ): SleepStats.Stage {
         if (motionRecent) return SleepStats.Stage.AWAKE
-        if (hrNow <= 0f || hrMedian == null || hrMedian <= 0f) return SleepStats.Stage.UNKNOWN
-        return if (hrNow <= hrMedian * DEEP_HR_FACTOR) SleepStats.Stage.DEEP
+        if (hrNow <= 0f || hrAgeMin > MAX_HR_AGE_MIN) return SleepStats.Stage.UNKNOWN
+        val median = hrMedianWindow ?: hrMedianSession
+        if (median == null || median <= 0f) return SleepStats.Stage.UNKNOWN
+        return if (hrNow <= median * DEEP_HR_FACTOR) SleepStats.Stage.DEEP
         else SleepStats.Stage.LIGHT
     }
 

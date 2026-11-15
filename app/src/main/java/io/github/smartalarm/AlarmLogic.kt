@@ -48,6 +48,10 @@ object AlarmLogic {
     private var lastMotionTs = System.currentTimeMillis()
     private var lastTriggerReason = ""
     private var firedAt = 0L
+    /** Все сэмплы пульса с момента взвода: запасная медиана для оценки фазы. */
+    private val sessionHr = ArrayDeque<Float>()
+    /** Последняя диагностика оценки фазы (пишется в лог при срабатывании). */
+    private var phaseDebug = ""
 
     /**
      * Атомарный дедуп срабатывания: и дедлайн из сервиса, и AlarmManager приходят
@@ -74,12 +78,27 @@ object AlarmLogic {
     /** Человеческое название фазы для экрана истории. */
     fun wakePhaseLabel(): String = PhaseEstimator.label(wakePhaseStage)
 
-    /** Оценить текущую фазу по последнему пульсу, ночной медиане и недавнему движению. */
+    /**
+     * Оценить текущую фазу по последнему пульсу, ночной медиане и недавнему движению.
+     *
+     * Ночью пульс приходит с большими паузами (в реальную ночь последний сэмпл был
+     * за 41 минуту до срабатывания), поэтому:
+     *  - медиана «сейчас» может быть недоступна → берём медиану за всю ночь;
+     *  - последний пульс разрешаем до [PhaseEstimator.MAX_HR_AGE_MIN] минут давности.
+     */
     private fun currentPhase(now: Long): SleepStats.Stage {
-        val median = baseline(now)
-        val hr = synchronized(lock) { lastHrValue }
+        val medianWindow = baseline(now)
+        val (hr, hrAgeMin) = synchronized(lock) {
+            val age = if (lastHrAt > 0) (now - lastHrAt) / 60_000f else Float.MAX_VALUE
+            lastHrValue to age
+        }
+        val medianSession = synchronized(lock) {
+            if (sessionHr.size >= 8) ArousalMath.median(sessionHr.toList()) else null
+        }
         val motionRecent = (now - synchronized(lock) { lastMotionTs }) <= PhaseEstimator.MOTION_RECENT_MS
-        return PhaseEstimator.estimate(hr, median, motionRecent)
+        phaseDebug = "hr=${hr.toInt()} age=${hrAgeMin.toInt()}m " +
+            "medWin=${medianWindow?.toInt()} medNight=${medianSession?.toInt()} motion=$motionRecent"
+        return PhaseEstimator.estimate(hr, hrAgeMin, medianWindow, medianSession, motionRecent)
     }
 
     /** Зафиксировать фазу, в которой человек проснулся (вызывается при срабатывании). */
@@ -88,7 +107,7 @@ object AlarmLogic {
         val stage = currentPhase(now)
         wakePhaseStage = stage
         Prefs.setLastWakePhase(ctx, PhaseEstimator.label(stage))
-        log(ctx, "wake phase recorded: ${PhaseEstimator.label(stage)} ($reason)")
+        log(ctx, "wake phase recorded: ${PhaseEstimator.label(stage)} ($reason) [$phaseDebug]")
         return stage
     }
 
@@ -336,6 +355,8 @@ object AlarmLogic {
             lastHrValue = hr
             lastHrAt = now
             hrSamples.add(now to hr)
+            sessionHr.addLast(hr)
+            while (sessionHr.size > 5000) sessionHr.removeFirst()
             hrSamples.removeAll { now - it.first > ArousalMath.BASELINE_WINDOW_MS }
         }
     }
