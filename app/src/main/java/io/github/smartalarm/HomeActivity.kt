@@ -190,7 +190,8 @@ class HomeActivity : ComponentActivity() {
         val intent = Intent(this, StatsActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         startActivity(intent)
-        overridePendingTransition(Sections.animEnter(true), Sections.animExit(true))
+        // exit = 0: окно не двигаем второй раз, его контент уводит наш сдвиг (см. SwipeSections).
+        overridePendingTransition(Sections.animEnter(true), 0)
     }
 
     private fun overlay(topPx: Int, heightPx: Int): FrameLayout.LayoutParams =

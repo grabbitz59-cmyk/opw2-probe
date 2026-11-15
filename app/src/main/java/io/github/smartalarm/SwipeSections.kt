@@ -119,10 +119,17 @@ class SectionSwipe(
         // У Activity нет своего performHapticFeedback — вибрируем через decorView.
         activity.window?.decorView?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         val target = if (forward) Sections.next(index) else Sections.prev(index)
-        // Одно непрерывное движение вместо трёх фаз. Раньше было: свой сдвиг 180 мс, затем
-        // пауза на создание Activity (на часах это десятки-сотни мс), затем slide окна 220 мс —
-        // на стыке фаз получался рывок. Теперь окно уезжает само (slide_out), а контент уже
-        // стоит там, куда его утянул палец: движение продолжается ровно с точки отпускания.
+        val w = if (content.width > 0) content.width.toFloat() else 466f
+        // Замерено на часах: окно новой Activity появляется через 121–243 мс
+        // (ActivityTaskManager: «Displayed ... +167ms»). Если в это время ничего не рисовать,
+        // экран замирает и страница «впрыгивает» — это и читается как дёрганье.
+        // Поэтому свой сдвиг продолжается и перекрывает задержку, а окно потом въезжает
+        // enter-анимацией поверх (exit-анимации у него нет, иначе окно поедет второй раз).
+        content.animate()
+            .translationX(if (forward) -w else w)
+            .setDuration(COMMIT_MS)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
         goTo(target, forward)
     }
 
@@ -130,8 +137,8 @@ class SectionSwipe(
         val intent = Intent(activity, Sections.classOf(section))
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         activity.startActivity(intent)
-        // Вход и выход — одинаковой длительности и одной кривой, поэтому страницы едут синхронно.
-        activity.overridePendingTransition(Sections.animEnter(forward), Sections.animExit(forward))
+        // exit = 0: старое окно не двигаем повторно; enter стартует, когда новое окно готово.
+        activity.overridePendingTransition(Sections.animEnter(forward), 0)
     }
 
     private fun revert() {
@@ -161,6 +168,9 @@ class SectionSwipe(
 
         /** Горизонталь должна быть заметно больше вертикали. */
         const val SLOPE = 1.4f
+
+        /** Доводка контента за край: перекрывает задержку старта Activity (120–240 мс). */
+        const val COMMIT_MS = 240L
 
         const val REVERT_MS = 140L
     }
