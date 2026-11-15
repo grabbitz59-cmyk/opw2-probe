@@ -81,7 +81,7 @@ class HomeActivity : ComponentActivity() {
      * без кнопок, градиента и пульсации — так экран не выжигает AMOLED.
      */
     private fun setupAmbient() {
-        ambient = AmbientLifecycleObserver(
+        val observer = AmbientLifecycleObserver(
             this,
             object : AmbientLifecycleObserver.AmbientLifecycleCallback {
                 override fun onEnterAmbient(details: AmbientLifecycleObserver.AmbientDetails) {
@@ -98,6 +98,10 @@ class HomeActivity : ComponentActivity() {
                 }
             },
         )
+        ambient = observer
+        // Без явной регистрации в lifecycle колбэки ambient не приходят: в v1 наблюдатель только
+        // создавался, поэтому настоящий AOD не включался (работал лишь отладочный force_ambient).
+        lifecycle.addObserver(observer)
     }
 
     private fun applyAmbient(on: Boolean) {

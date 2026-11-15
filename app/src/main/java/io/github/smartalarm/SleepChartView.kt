@@ -16,12 +16,26 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * График ночи в духе OHealth.
+ * Карточка графика ночи в языке v1: полоса оценённых фаз, линия пульса акцентом
+ * с градиентной заливкой, столбики движения, отметка срабатывания будильника,
+ * время начала и конца записи. Всё — внутри карточки со скруглением и обводкой
+ * `Ui.surface` / `Ui.stroke`, как в остальном приложении.
  *
- * Сверху полоса оценочных фаз (бодрствование / лёгкий / глубокий / нет данных),
- * ниже линия пульса с градиентной заливкой и столбики движения, внизу — время начала
- * и конца записи. Всё рисуется внутри «карточки» со скруглением, чтобы вписываться
- * в общий стиль приложения.
+ * Геометрия зафиксирована под полосу экрана **y 122…214, ширина 336 px** (экран 2).
+ * Логическая сетка `LOGICAL_W × LOGICAL_H` = 336 × 92 px; `onDraw` масштабирует её от
+ * реальных `width/height`, поэтому View можно смотреть и в превью, и в другой полосе.
+ *
+ * Внутри карточки (логические px, 1 dp = 2 px на OPW2):
+ *   • полоса фаз         y  10…28  (18 px)
+ *   • полоса пульса      y  34…56  (22 px, 3 линии сетки)
+ *   • столбики движения  y  60…68  (8 px)
+ *   • подписи времени    базовая линия 84, кегль 16 px
+ * Ни одна часть графика не выходит за прямоугольник карточки — поэтому внешний
+ * прямоугольник (а значит и дуга круга) обрезать её не может.
+ *
+ * Ambient (AOD): `setAmbient(true)` гасит сетку и столбики, оставляя притушённые
+ * полосу фаз и линию пульса на чёрной карточке — без анимаций (их здесь и нет),
+ * чтобы AMOLED не выжигал экран (R9).
  *
  * Фазы оценочные (см. [SleepStats]): настоящих N1/N2/N3/REM на OPW2 не получить.
  */
@@ -32,7 +46,9 @@ class SleepChartView @JvmOverloads constructor(
 ) : View(context, attrs, defStyle) {
 
     private var night: SleepStats.Night? = null
+    private var ambient = false
 
+    // Краски — поля класса: в onDraw не создаём новых объектов, только rewind у Path.
     private val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         color = Ui.surface
@@ -44,155 +60,262 @@ class SleepChartView @JvmOverloads constructor(
     }
     private val cardRect = RectF()
 
-    private val gridPaint = Paint().apply {
+    private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.argb(40, 159, 179, 184)
         strokeWidth = 1f
     }
-    private val hrPaint = Paint().apply {
+    private val hrPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Ui.accent
         strokeWidth = 3f
         style = Paint.Style.STROKE
-        isAntiAlias = true
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
-    private val fillPaint = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
-    private val motionPaint = Paint().apply { color = Ui.surfaceHi; isAntiAlias = true }
-    private val alarmPaint = Paint().apply { color = Ui.danger; strokeWidth = 2f }
-    private val stagePaint = Paint().apply { isAntiAlias = true }
-    private val labelPaint = Paint().apply {
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val motionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Ui.surfaceHi
+        style = Paint.Style.FILL
+    }
+    private val alarmPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Ui.danger
+        strokeWidth = 2f
+    }
+    private val stagePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+
+    private val emptyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Ui.textTertiary
-        textSize = 15f
-        isAntiAlias = true
+        textSize = EMPTY_PX
         textAlign = Paint.Align.CENTER
     }
-    private val timePaint = Paint().apply {
+    private val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Ui.textTertiary
-        textSize = 16f
-        isAntiAlias = true
+        textSize = TIME_PX
+        textAlign = Paint.Align.LEFT
     }
+
+    /** Переиспользуемые ломаные: в onDraw только `rewind()`, без аллокаций. */
+    private val hrLine = Path()
+    private val hrArea = Path()
 
     private val timeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
         .withZone(ZoneId.systemDefault())
 
+    /** Данные ночи; `null` — состояние «нет данных» внутри карточки. */
     fun setNight(n: SleepStats.Night?) {
         night = n
         invalidate()
     }
 
-    private fun dp(v: Float): Float = v * resources.displayMetrics.density
+    /**
+     * Ambient (AOD): карточка становится чёрной, сетка и столбики движения исчезают,
+     * полоса фаз и линия пульса остаются притушёнными. Анимаций в этом View нет,
+     * поэтому замораживать в AOD нечего.
+     */
+    fun setAmbient(on: Boolean) {
+        if (ambient == on) return
+        ambient = on
+        invalidate()
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val w = width.toFloat()
         val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
 
-        // карточка
-        val radius = dp(16f)
+        // Масштаб от логической сетки 336 × 92 px: на устройстве он равен 1.
+        val sx = w / LOGICAL_W
+        val sy = h / LOGICAL_H
+
+        // ---------- карточка (v1: фон surface + обводка stroke, радиус 16 dp) ----------
+        val radius = CARD_RADIUS * minOf(sx, sy)
+        cardPaint.color = if (ambient) Color.BLACK else Ui.surface
+        cardStroke.strokeWidth = if (ambient) 1f else 2f
+        cardStroke.color = Ui.stroke
+        cardStroke.alpha = if (ambient) 60 else 255
         cardRect.set(0f, 0f, w, h)
         canvas.drawRoundRect(cardRect, radius, radius, cardPaint)
         canvas.drawRoundRect(cardRect, radius, radius, cardStroke)
 
+        // Внутренние полосы карточки — как в шапке класса.
+        val plotL = PAD_X * sx
+        val plotR = w - PAD_X * sx
+        val plotW = (plotR - plotL).coerceAtLeast(1f)
+        val stripTop = STRIP_TOP * sy
+        val stripBottom = stripTop + STRIP_H * sy
+        val hrTop = HR_TOP * sy
+        val hrBottom = HR_BOTTOM * sy
+        val motionBottom = MOTION_BOTTOM * sy
+        val timeY = TIME_BASELINE * sy
+
         val n = night
-        val pad = dp(10f)
         if (n == null || n.series.size < 2) {
-            labelPaint.textSize = dp(11f)
-            canvas.drawText("нет данных", w / 2f, h / 2f, labelPaint)
+            // «Нет данных» — не пустота: v1 рисовал здесь пустую карточку.
+            emptyPaint.textSize = EMPTY_PX * sy
+            emptyPaint.color = Ui.textTertiary
+            emptyPaint.alpha = if (ambient) AMBIENT_ALPHA else 255
+            canvas.drawText(
+                "нет данных",
+                w / 2f,
+                h / 2f + emptyPaint.textSize * 0.35f,
+                emptyPaint,
+            )
             return
         }
 
-        val stageTop = pad
-        val stageBottom = h * 0.20f
-        val hrTop = h * 0.28f
-        val hrBottom = h * 0.68f
-        val motionTop = h * 0.74f
-        val timeY = h - dp(6f)
-        val plotW = w - pad * 2
         val span = (n.endTs - n.startTs).coerceAtLeast(1L).toFloat()
         val bucketW = (plotW * SleepStats.BUCKET_MS / span).coerceAtLeast(1f)
+        val tone = if (ambient) AMBIENT_ALPHA else 255
 
-        // Полоса фаз
+        // ---------- 1. полоса фаз: цвета строго из Ui.phaseColor ----------
+        // Порядок важен: setColor() сбрасывает альфу, поэтому alpha ставим ПОСЛЕ цвета.
         for (i in n.series.indices) {
-            val r = n.series[i]
-            val x = pad + plotW * (r.ts - n.startTs) / span
-            stagePaint.color = Ui.phaseColor(n.stages.getOrNull(i) ?: SleepStats.Stage.UNKNOWN)
-            stagePaint.alpha = 235
-            canvas.drawRect(x, stageTop, x + bucketW, stageBottom, stagePaint)
+            val row = n.series[i]
+            val x = plotL + plotW * (row.ts - n.startTs) / span
+            // Последний бакет не должен вылезать за правый паддинг карточки.
+            val xRight = (x + bucketW).coerceAtMost(plotR).coerceAtLeast(x + 0.75f)
+            stagePaint.color = Ui.phaseColor(
+                n.stages.getOrNull(i) ?: SleepStats.Stage.UNKNOWN,
+            )
+            stagePaint.alpha = if (ambient) AMBIENT_ALPHA else PHASE_ALPHA
+            canvas.drawRect(x, stripTop, xRight, stripBottom, stagePaint)
         }
 
-        // Сетка пульса
-        for (i in 0..2) {
-            val y = hrTop + (hrBottom - hrTop) * i / 2f
-            canvas.drawLine(pad, y, pad + plotW, y, gridPaint)
+        // ---------- 2. сетка пульса: в ambient её нет (лишний свет и выжигание) ----------
+        if (!ambient) {
+            for (i in 0..2) {
+                val y = hrTop + (hrBottom - hrTop) * i / 2f
+                canvas.drawLine(plotL, y, plotR, y, gridPaint)
+            }
         }
 
-        val hrMin = if (n.hrMin > 0) n.hrMin - 5 else 50
-        val hrMax = if (n.hrMax > 0) n.hrMax + 5 else 110
+        // ---------- 3. пульс акцентом + градиентная заливка под линией ----------
+        val hrMin = if (n.hrMin > 0) n.hrMin - HR_PAD else DEFAULT_HR_LO
+        val hrMax = if (n.hrMax > 0) n.hrMax + HR_PAD else DEFAULT_HR_HI
         val hrRange = (hrMax - hrMin).coerceAtLeast(1)
 
-        val line = Path()
-        val area = Path()
+        hrLine.rewind()
+        hrArea.rewind()
+        fillPaint.shader = LinearGradient(
+            0f, hrTop, 0f, hrBottom,
+            Color.argb(90 * tone / 255, 34, 224, 180),
+            Color.argb(0, 34, 224, 180),
+            Shader.TileMode.CLAMP,
+        )
+        hrPaint.alpha = tone
+
         var started = false
-        var lastX = pad
-        for (r in n.series) {
-            if (r.hr <= 0) {
-                started = false
+        var lastX = plotL
+        for (row in n.series) {
+            if (row.hr <= 0) {
+                // Разрыв в данных: дорисовываем накопленный сегмент и начинаем новый.
+                if (started) {
+                    hrArea.lineTo(lastX, hrBottom)
+                    hrArea.close()
+                    canvas.drawPath(hrArea, fillPaint)
+                    canvas.drawPath(hrLine, hrPaint)
+                    hrLine.rewind()
+                    hrArea.rewind()
+                    started = false
+                }
                 continue
             }
-            val x = pad + plotW * (r.ts - n.startTs) / span
-            val y = hrBottom - (hrBottom - hrTop) * (r.hr - hrMin) / hrRange
+            val x = plotL + plotW * (row.ts - n.startTs) / span
+            val y = hrBottom - (hrBottom - hrTop) * (row.hr - hrMin) / hrRange
             if (!started) {
-                line.moveTo(x, y)
-                area.moveTo(x, hrBottom)
-                area.lineTo(x, y)
+                hrLine.moveTo(x, y)
+                hrArea.moveTo(x, hrBottom)
+                hrArea.lineTo(x, y)
                 started = true
             } else {
-                line.lineTo(x, y)
-                area.lineTo(x, y)
+                hrLine.lineTo(x, y)
+                hrArea.lineTo(x, y)
             }
             lastX = x
         }
-        area.lineTo(lastX, hrBottom)
-        area.close()
-
-        fillPaint.shader = LinearGradient(
-            0f, hrTop, 0f, hrBottom,
-            Color.argb(90, 34, 224, 180), Color.argb(0, 34, 224, 180),
-            Shader.TileMode.CLAMP,
-        )
-        canvas.drawPath(area, fillPaint)
+        if (started) {
+            hrArea.lineTo(lastX, hrBottom)
+            hrArea.close()
+            canvas.drawPath(hrArea, fillPaint)
+            canvas.drawPath(hrLine, hrPaint)
+        }
         fillPaint.shader = null
-        canvas.drawPath(line, hrPaint)
 
-        // Движение
-        val maxMovesPct = n.series.maxOfOrNull { ArousalMath.movesPct(it.n, it.moves) } ?: 0.0
-        for (r in n.series) {
-            if (!SleepStats.isMotion(r)) continue
-            val x = pad + plotW * (r.ts - n.startTs) / span
-            val strength: Float = if (maxMovesPct > 0) {
-                (ArousalMath.movesPct(r.n, r.moves) / maxMovesPct).coerceIn(0.2, 1.0).toFloat()
-            } else {
-                (r.std / 2.0).coerceIn(0.2, 1.0).toFloat()
+        // ---------- 4. столбики движения (Ui.surfaceHi), в ambient не рисуем ----------
+        if (!ambient) {
+            val maxMoves = n.series.maxOfOrNull { ArousalMath.movesPct(it.n, it.moves) } ?: 0.0
+            val barBand = (motionBottom - MOTION_TOP * sy).coerceAtLeast(1f)
+            motionPaint.color = Ui.surfaceHi
+            for (row in n.series) {
+                if (!SleepStats.isMotion(row)) continue
+                val x = plotL + plotW * (row.ts - n.startTs) / span
+                val strength: Float = if (maxMoves > 0.0) {
+                    (ArousalMath.movesPct(row.n, row.moves) / maxMoves).coerceIn(0.2, 1.0).toFloat()
+                } else {
+                    (row.std / 2.0).coerceIn(0.2, 1.0).toFloat()
+                }
+                val barH = barBand * strength
+                canvas.drawRoundRect(
+                    x,
+                    motionBottom - barH,
+                    x + bucketW,
+                    motionBottom,
+                    bucketW / 2f,
+                    bucketW / 2f,
+                    motionPaint,
+                )
             }
-            val barH = (timeY - dp(4f) - motionTop) * strength
-            canvas.drawRoundRect(
-                x, timeY - dp(4f) - barH, x + bucketW, timeY - dp(4f),
-                bucketW / 2f, bucketW / 2f, motionPaint,
-            )
         }
 
-        // Срабатывание будильника
+        // ---------- 5. отметка срабатывания будильника ----------
         if (n.alarmFired) {
-            n.series.firstOrNull { it.alarmState == "triggered" }?.let { r ->
-                val x = pad + plotW * (r.ts - n.startTs) / span
-                canvas.drawLine(x, stageTop, x, timeY - dp(2f), alarmPaint)
+            n.series.firstOrNull { it.alarmState == "triggered" }?.let { row ->
+                val x = plotL + plotW * (row.ts - n.startTs) / span
+                alarmPaint.alpha = tone
+                canvas.drawLine(x, stripTop, x, motionBottom, alarmPaint)
             }
         }
 
-        // Время начала и конца
-        canvas.drawText(timeFmt.format(Instant.ofEpochMilli(n.startTs)), pad, timeY, timePaint)
-        timePaint.textAlign = Paint.Align.RIGHT
-        canvas.drawText(timeFmt.format(Instant.ofEpochMilli(n.endTs)), w - pad, timeY, timePaint)
+        // ---------- 6. время начала и конца: единственные подписи в карточке ----------
+        timePaint.textSize = TIME_PX * sy
+        timePaint.color = Ui.textTertiary
+        timePaint.alpha = tone
         timePaint.textAlign = Paint.Align.LEFT
+        canvas.drawText(timeFmt.format(Instant.ofEpochMilli(n.startTs)), plotL, timeY, timePaint)
+        timePaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(timeFmt.format(Instant.ofEpochMilli(n.endTs)), plotR, timeY, timePaint)
+        timePaint.textAlign = Paint.Align.LEFT
+    }
+
+    private companion object {
+        /** Логическая сетка карточки: полоса экрана 2 — y 122…214, ширина 336 px. */
+        const val LOGICAL_W = 336f
+        const val LOGICAL_H = 92f
+
+        /** Радиус карточки 16 dp = 32 px. */
+        const val CARD_RADIUS = 32f
+
+        /** Внутренние отступы и полосы, логические px. */
+        const val PAD_X = 18f
+        const val STRIP_TOP = 10f
+        const val STRIP_H = 18f
+        const val HR_TOP = 34f
+        const val HR_BOTTOM = 56f
+        const val MOTION_TOP = 60f
+        const val MOTION_BOTTOM = 68f
+        const val TIME_BASELINE = 84f
+
+        /** Кегли подписей, px. */
+        const val TIME_PX = 16f
+        const val EMPTY_PX = 22f
+
+        /** Альфа полосы фаз в норме и всё притушенное в AOD. */
+        const val PHASE_ALPHA = 235
+        const val AMBIENT_ALPHA = 90
+
+        /** Запас по пульсу сверху/снизу и значения по умолчанию, если HR нет. */
+        const val HR_PAD = 5
+        const val DEFAULT_HR_LO = 50
+        const val DEFAULT_HR_HI = 110
     }
 }

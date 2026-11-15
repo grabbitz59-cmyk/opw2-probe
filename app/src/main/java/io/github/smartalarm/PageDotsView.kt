@@ -31,6 +31,14 @@ class PageDotsView @JvmOverloads constructor(
             phase = it.animatedValue as Float
             invalidate()
         }
+        // После перетекания возвращаем фазу в 0: в покое активная точка того же размера,
+        // что и в v1, — без «раздутой» точки и без остаточной подсветки.
+        addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: android.animation.Animator) {
+                phase = 0f
+                invalidate()
+            }
+        })
     }
 
     fun setPage(index: Int, pages: Int = 3) {
@@ -46,7 +54,10 @@ class PageDotsView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         val cy = height / 2f
         val gap = dp(9f)
-        val baseR = dp(2.6f)
+        // Радиусы ограничены высотой вью: полоса индикатора 20 px (408…428 px), и активная
+        // точка с подсветкой не должны обрезаться её границами.
+        val maxR = height / 2f - 1f
+        val baseR = minOf(dp(2.6f), maxR / 1.5f)
         val span = (total - 1) * gap
         var x = (width - span) / 2f
         for (i in 0 until total) {
@@ -61,7 +72,7 @@ class PageDotsView @JvmOverloads constructor(
         if (phase > 0.01f) {
             val cx = (width - span) / 2f + current * gap
             active.alpha = (70 * (1f - phase)).toInt().coerceIn(0, 70)
-            canvas.drawCircle(cx, cy, baseR * 3.2f, active)
+            canvas.drawCircle(cx, cy, minOf(baseR * 3.2f, maxR), active)
             active.alpha = 255
         }
     }
