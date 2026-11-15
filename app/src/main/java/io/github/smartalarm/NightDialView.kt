@@ -255,17 +255,17 @@ class NightDialView @JvmOverloads constructor(
 
     /** Обод: те же 72 риски, что на экранах 2–3 (общий код — [Bezel.drawTicks]). */
     private fun drawBezel(canvas: Canvas, cx: Float, cy: Float, k: Float) {
-        val alpha = if (dimmed) Bezel.AMB_TICK_ALPHA else 255
-        tickMinor.alpha = alpha
-        tickMajor.alpha = alpha
-        Bezel.drawTicks(canvas, cx, cy, k, tickMinor, tickMajor)
         if (dimmed) {
-            // R9: в AOD на экране должно остаться «тонкое кольцо». Риски при 30 % яркости дают
-            // на чёрном около (10,11,12) — это невидимо, поэтому кольцо рисуется отдельно,
-            // 1 px бумагой с alpha AMB_RING_ALPHA, и шкала поверх него читается как шкала.
+            // R9: в AOD остаётся только время и ТОНКОЕ КОЛЬЦО. Риски в AOD не рисуем: замерено
+            // на устройстве — кольцо на r=200 занимало 79 % окружности и «съедало» шкалу,
+            // получалось ни кольцо, ни шкала. Кольцо ушло на r=193 (между контентом и рисками).
             ringPaint.strokeWidth = 1f * k
-            ringPaint.color = Ui.alpha(Ui.paper3, AMB_RING_ALPHA)
-            canvas.drawCircle(cx, cy, AMB_RING_R * k, ringPaint)
+            ringPaint.color = Ui.alpha(Ui.paper3, Bezel.AMB_RING_ALPHA)
+            canvas.drawCircle(cx, cy, Bezel.AMB_RING_R * k, ringPaint)
+        } else {
+            tickMinor.alpha = 255
+            tickMajor.alpha = 255
+            Bezel.drawTicks(canvas, cx, cy, k, tickMinor, tickMajor)
         }
         if (nowMinutes >= 0) {
             val a = Math.toRadians(angleOf(nowMinutes).toDouble())

@@ -27,9 +27,8 @@ object Bezel {
     const val TICK_R_IN = 197f
     const val TICK_R_MINOR_OUT = 203f
     const val TICK_R_MAJOR_OUT = 208f
-    const val AMB_TICK_ALPHA = 150
-    const val AMB_RING_ALPHA = 110
-    const val AMB_RING_R = 200f
+    const val AMB_RING_ALPHA = 205
+    const val AMB_RING_R = 193f
 
     /** Часовой угол (canvas: 0° = 3 часа, по часовой) для времени в минутах от полуночи. */
     fun angleOf(minutes: Int): Float {
@@ -89,13 +88,14 @@ class BezelView @JvmOverloads constructor(
         val cy = height / 2f
 
         if (ambient) {
+            // R9: в AOD — только тонкое кольцо, без шкалы (иначе кольцо и риски спорят за полосу).
             ringPaint.strokeWidth = 1f * k
-            ringPaint.color = Ui.alpha(Ui.paper3, Bezel.AMB_RING_ALPHA)
-            canvas.drawCircle(cx, cy, Bezel.AMB_RING_R * k, ringPaint)
+            ringPaint.color = Ui.alpha(Ui.paper3, AMB_RING_ALPHA)
+            canvas.drawCircle(cx, cy, AMB_RING_R * k, ringPaint)
+        } else {
+            tickMinor.alpha = 255
+            tickMajor.alpha = 255
+            Bezel.drawTicks(canvas, cx, cy, k, tickMinor, tickMajor)
         }
-        val alpha = if (ambient) Bezel.AMB_TICK_ALPHA else 255
-        tickMinor.alpha = alpha
-        tickMajor.alpha = alpha
-        Bezel.drawTicks(canvas, cx, cy, k, tickMinor, tickMajor)
     }
 }
