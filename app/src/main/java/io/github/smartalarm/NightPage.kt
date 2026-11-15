@@ -169,7 +169,7 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         // 5. Сводка: две строки 18 px, y 272…318.
         summaryView = block()
         // Детали ночи: открываются вертикальной прокруткой (страница — ScrollView).
-        page.addView(summaryView, FrameLayout.LayoutParams(300, 120).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; topMargin = BAND_SUMMARY_TOP })
+        page.addView(summaryView, FrameLayout.LayoutParams(300, 280).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; topMargin = BAND_SUMMARY_TOP })
 
         // 6. Подсказка полноэкранного режима — видна только когда график развёрнут.
         hintView = label("ТАП — СВЕРНУТЬ", SZ_HINT, Ui.textTertiary, LS_HINT)
@@ -452,7 +452,10 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         if (measure(line2 + filePart, SZ_SUMMARY, 0f) <= W_SUMMARY - TEXT_PAD_PX) {
             line2 += filePart
         }
-        setSummary(listOf(line1, line2))
+        val phasesLine = "фазы: глубокий ${hm(n.deepMin)} · лёгкий ${hm(n.lightMin)} · бодрств. ${hm(n.awakeMin)}"
+        val quietLine = "спокойный отрезок ${hm(n.longestQuietMin.toInt())} · пульс " + (if (n.hrMin > 0) "${n.hrMin}–${n.hrMax}, ср. ${n.hrAvg}" else "н/д")
+        val fileLine = "файл " + file.name
+        setSummary(listOf(line1, line2, phasesLine, quietLine, fileLine))
     }
 
     private fun setSummary(lines: List<String>) {
@@ -536,7 +539,7 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         const val BAND_SUMMARY_TOP = 404
 
         /** Высота прокручиваемого содержимого: графики, легенда, фаза и детали ночи. */
-        const val CONTENT_H = 540
+        const val CONTENT_H = 720
         const val BAND_SUMMARY_BOTTOM = 390
         const val BAND_CHIPS_TOP = 322
         const val BAND_CHIPS_BOTTOM = 400
