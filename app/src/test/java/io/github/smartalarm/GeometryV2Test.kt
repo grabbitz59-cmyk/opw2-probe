@@ -136,8 +136,11 @@ class GeometryV2Test {
 
     @Test
     fun `arc start angle matches the clock position`() {
-        assertEquals(350.0, angleOf(23 * 60 + 40), 0.001)
+        // 23:40 → 1420 мин → на 12-часовой шкале 11:40 → 350° от полудня; canvas-угол = 350 − 90.
+        assertEquals(260.0, angleOf(23 * 60 + 40), 0.001)
+        // 07:12 → 126° (низ-лево, позиция 7:12).
         assertEquals(126.0, angleOf(7 * 60 + 12), 0.001)
+        // 00:00 — ровно 12 часов, верх (−90° в canvas).
         assertEquals(-90.0, angleOf(0), 0.001)
     }
 
