@@ -30,6 +30,10 @@ class StatsActivity : ComponentActivity() {
     private lateinit var phasesView: TextView
     private lateinit var efficiencyView: TextView
     private lateinit var fileView: TextView
+    private lateinit var metricValue: TextView
+    private lateinit var metricLabel: TextView
+    private lateinit var metricValue2: TextView
+    private lateinit var metricLabel2: TextView
     private lateinit var contentView: LinearLayout
 
     private val screenW: Float get() = resources.displayMetrics.widthPixels.toFloat()
