@@ -251,6 +251,12 @@ class HomeActivity : ComponentActivity() {
                 dial.leverText = "СПАТЬ"
             }
         }
+
+        // Экран 1 рисуется на canvas, поэтому в дереве доступности текста нет — отдаём состояние
+        // одной строкой: и TalkBack, и проверка через `uiautomator dump` видят, что на экране (R7).
+        dial.contentDescription = "Подъём " + dial.targetText +
+            ", сейчас " + String.format(Locale.US, "%02d:%02d", nowMin / 60, nowMin % 60) +
+            ", " + dial.stateText + ", " + dial.detailText
     }
 
     /** «ЧЕРЕЗ 7 Ч 12 М» / «ЧЕРЕЗ 12 М» — словами, как требует R7. */
