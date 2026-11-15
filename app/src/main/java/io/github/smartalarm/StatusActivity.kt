@@ -130,6 +130,17 @@ class StatusActivity : ComponentActivity() {
             .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
 
         addInfo(root, "Будильник", if (armed) "$time · взведён" else "$time · не взведён")
+        // Системный будильник часов: сюда попадает и будильник, синхронизированный с телефоном,
+        // если такая синхронизация включена в паре телефон↔часы.
+        val sys = SystemAlarm.read(this)
+        addInfo(
+            root, "Будильник системы",
+            when {
+                sys == null -> "нет"
+                sys.isOurs -> "наш, ${stamp(sys.triggerAt)}"
+                else -> "${stamp(sys.triggerAt)} · ${sys.creator}"
+            },
+        )
         addInfo(
             root, "Повтор",
             when (val mask = Prefs.repeatDays(this)) {
@@ -186,8 +197,11 @@ class StatusActivity : ComponentActivity() {
         setContentView(frame)
     }
 
-    private fun addInfo(parent: LinearLayout, key: String, value: String) {
-        parent.addView(
+    private fun stamp(triggerAt: Long): String =
+        java.time.Instant.ofEpochMilli(triggerAt)
+            .atZone(java.time.ZoneId.systemDefault())
+            .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.US))
+    private fun addInfo(parent: LinearLayout, key: String, value: String) {        parent.addView(
             row(value, 11f, Ui.TEXT_SECONDARY).apply {
                 gravity = Gravity.START
                 setPadding(dp(2), dp(5), dp(2), 0)

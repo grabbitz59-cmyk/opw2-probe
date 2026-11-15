@@ -292,7 +292,33 @@ class HomeActivity : ComponentActivity() {
 
     // ---------- состояние ----------
 
+    /**
+     * Синхронизация с системным будильником часов.
+     *
+     * Если на часах есть «чужой» будильник (собственное приложение часов, а при включённой
+     * синхронизации в паре телефон↔часы — будильник телефона) и наш ещё не взведён,
+     * берём его время как цель умного будильника.
+     */
+    private fun adoptSystemAlarm() {
+        val info = SystemAlarm.read(this) ?: return
+        if (info.isOurs || isArmed()) return
+        val cal = Calendar.getInstance().apply { timeInMillis = info.triggerAt }
+        val h = cal.get(Calendar.HOUR_OF_DAY)
+        val m = cal.get(Calendar.MINUTE)
+        if (h == hour && m == minute) return
+        hour = h
+        minute = m
+        Prefs.setTargetHour(this, h)
+        Prefs.setTargetMinute(this, m)
+        AlarmLogic.log(
+            this,
+            "synced target from system alarm " +
+                String.format(Locale.US, "%02d:%02d", h, m) + " (${info.creator})",
+        )
+    }
+
     private fun refresh() {
+        adoptSystemAlarm()
         val armed = isArmed()
         val running = NightLogService.isRunning
         val target = currentTarget()
