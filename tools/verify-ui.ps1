@@ -473,6 +473,17 @@ foreach ($r in $rows) {
 
 # ---------------------------------------------------------------- сводка
 
+if ($rows.Count -eq 0 -or (@($rows | Where-Object { -not $_.IsContainer }).Count -eq 0)) {
+    Write-Head 'итог'
+    Write-Host '  ВНИМАНИЕ: uiautomator не дал ни одного измеримого текстового узла'
+    Write-Host '  (либо вообще ни одного, либо только полноэкранные контейнеры).'
+    Write-Host ('  Активное окно пакета: ' + $dumpRes.RootPackage + '; PNG: ' + $pngPath)
+    Write-Host '  Так бывает, когда экран нарисован на canvas (дизайн v2): uiautomator видит только'
+    Write-Host '  контейнер с content-desc. Геометрия по узлам НЕ проверена — смотри PNG или мерь пиксели.'
+    Write-Host '  Код возврата 4.'
+    exit 4
+}
+
 $fails = @($rows | Where-Object { $_.Verdict -eq 'FAIL' })
 $passes = @($rows | Where-Object { $_.Verdict -eq 'PASS' })
 $conts = @($rows | Where-Object { $_.IsContainer })
