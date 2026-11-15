@@ -83,6 +83,12 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
     private lateinit var wakeView: TextView
     private lateinit var summaryView: TextView
     private lateinit var chipsRow: LinearLayout
+
+    /** Подсказка полноэкранного режима (видна только в развёрнутом графике). */
+    private lateinit var hintView: TextView
+
+    /** График развёрнут на весь круг: остальные блоки страницы скрыты. */
+    private var expanded = false
     private lateinit var chipValue1: TextView
     private lateinit var chipLabel1: TextView
     private lateinit var chipValue2: TextView
@@ -149,10 +155,14 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         summaryView = block()
         page.addView(summaryView, band(BAND_SUMMARY_TOP, BAND_SUMMARY_BOTTOM, W_SUMMARY))
 
-        // 6. Плашки метрик: число 44 px + подпись, y 322…400.
-        chipsRow = buildChips()
-        // Плашки метрик (322…400) убраны: место отдано графику — он стал главным элементом,
-        // а «эффективность/пробуждения» теперь в строке сводки. chipsRow строится, но не добавляется.
+        // 6. Подсказка полноэкранного режима — видна только когда график развёрнут.
+        hintView = label("ТАП — СВЕРНУТЬ", SZ_HINT, Ui.textTertiary, LS_HINT)
+        page.addView(hintView, band(BAND_HINT_TOP, BAND_HINT_BOTTOM, W_HINT))
+        hintView.visibility = View.GONE
+
+        // 7. Тап по карточке разворачивает график на весь круг, повторный — сворачивает.
+        chart.isClickable = true
+        chart.setOnClickListener { toggleExpanded() }
 
         // 7. Индикатор раздела рисует хост (`SectionsActivity`) один на всё приложение
         //    в полосе y 414…434 — второй экземпляр здесь дублировал бы те же три точки.
@@ -168,6 +178,32 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
      * поэтому даже высокий блок у дуги не обрежется. [EDGE_MARGIN_PX] — зазор до дуги,
      * чтобы угол прямоугольника не касался края экрана.
      */
+    /**
+     * Полноэкранный график: тап по карточке разворачивает её почти на весь круг
+     * (340 × 240 px, y 112…352), остальные блоки страницы прячутся; повторный тап — назад.
+     * Внутри [SleepChartView] раскладка считается от фактической высоты, поэтому карточка
+     * просто растягивается: полоса фаз, пульс и столбики движения становятся крупнее.
+     */
+    private fun toggleExpanded() {
+        expanded = !expanded
+        val lp = chart.layoutParams as FrameLayout.LayoutParams
+        if (expanded) {
+            lp.topMargin = EXP_CHART_TOP
+            lp.height = EXP_CHART_H
+            lp.width = EXP_CHART_W.toInt()
+        } else {
+            lp.topMargin = BAND_CHART_TOP
+            lp.height = BAND_CHART_BOTTOM - BAND_CHART_TOP
+            lp.width = W_CHART.toInt()
+        }
+        chart.layoutParams = lp
+        val chrome = if (expanded) View.INVISIBLE else View.VISIBLE
+        titleView.visibility = chrome
+        legendRow.visibility = chrome
+        wakeView.visibility = chrome
+        summaryView.visibility = chrome
+        hintView.visibility = if (expanded) View.VISIBLE else View.GONE
+    }
     private fun band(top: Int, bottom: Int, widthCap: Float): FrameLayout.LayoutParams {
         val safe = RoundScreen.safeRowWidth(top.toFloat(), bottom.toFloat()) - EDGE_MARGIN_PX
         val w = if (safe > 0f) minOf(widthCap, safe).toInt().coerceAtLeast(1) else widthCap.toInt()
@@ -496,6 +532,18 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         const val W_WAKE = 312f
         const val W_SUMMARY = 268f
         const val W_CHIPS = 242f
+
+        // Полноэкранный график: 340×240 в y 112…352 (углы 208.7 <= 209).
+        const val EXP_CHART_TOP = 112
+        const val EXP_CHART_H = 240
+        const val EXP_CHART_W = 340f
+
+        // Подсказка под развёрнутым графиком.
+        const val BAND_HINT_TOP = 366
+        const val BAND_HINT_BOTTOM = 386
+        const val W_HINT = 280f
+        const val SZ_HINT = 16f
+        const val LS_HINT = 0.18f
         const val W_DOTS = 64f
 
         // ---------- кегли, px ----------
