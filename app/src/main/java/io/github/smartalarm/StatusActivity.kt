@@ -5,13 +5,10 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.os.BatteryManager
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
@@ -23,7 +20,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
-import androidx.wear.ambient.AmbientLifecycleObserver
 import java.util.Locale
 import kotlin.math.abs
 
@@ -40,8 +36,7 @@ import kotlin.math.abs
  *    углы карточек не выходят за безопасный радиус 209 px ни при каком скролле;
  *  - строка = 72 px (36 dp) — тап-зона всей строки проходит требование R3 (≥ 36 dp);
  *  - первые три строки видны без прокрутки, последняя строка после прокрутки заканчивается
- *    на y = 360 px, то есть не упирается в нижнюю дугу круга;
- *  - ambient (AOD): чёрный фон, притушённый заголовок, остальное скрыто.
+ *    на y = 360 px, то есть не упирается в нижнюю дугу круга.
  *
  * Кегли — как в v1 (20 px подпись/значение, 22 px заголовок), но не мельче 18 px.
  * Единицы ниже — пиксели устройства (OPW2: 466×466, 320 dpi, 1 dp = 2 px): так они совпадают
@@ -60,19 +55,10 @@ class StatusActivity : ComponentActivity() {
     /** Карточки-строки в порядке добавления: по индексу считается их y на экране. */
     private val cards = ArrayList<View>()
 
-    private val handler = Handler(Looper.getMainLooper())
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
-        setupAmbient()
         swipe = SectionSwipe(this, Sections.PULT, content)
-        // Отладка ambient: adb shell am start -n io.github.smartalarm/.StatusActivity \
-        //   --ez force_ambient true
-        // Позволяет увидеть AOD-отрисовку при выключенном AOD на устройстве.
-        if (intent?.getBooleanExtra("force_ambient", false) == true) {
-            handler.postDelayed({ applyAmbient(true) }, 400L)
-        }
     }
 
     override fun onResume() {
@@ -80,50 +66,6 @@ class StatusActivity : ComponentActivity() {
         if (::swipe.isInitialized) swipe.reset()
         // Статус — «живой» экран: при возврате перечитываем настройки, батарею и права.
         if (::column.isInitialized) refreshRows()
-    }
-
-    // ---------- ambient (AOD) ----------
-
-    /**
-     * Ambient по скиллу wear-os-ui (R9): в покое остаются только чёрный фон и притушённый
-     * заголовок — ни карточек, ни индикатора, чтобы AMOLED не выжигал области.
-     */
-    private fun setupAmbient() {
-        val observer = AmbientLifecycleObserver(
-            this,
-            object : AmbientLifecycleObserver.AmbientLifecycleCallback {
-                override fun onEnterAmbient(details: AmbientLifecycleObserver.AmbientDetails) {
-                    applyAmbient(true)
-                }
-
-                override fun onUpdateAmbient() {
-                    // В ambient контент скрыт — обновлять нечего.
-                }
-
-                override fun onExitAmbient() {
-                    applyAmbient(false)
-                }
-            },
-        )
-        // Observer живёт в lifecycle, отдельное поле не нужно: отписка произойдёт сама.
-        lifecycle.addObserver(observer)
-    }
-
-    private fun applyAmbient(on: Boolean) {
-        if (on) {
-            // Сбрасываем остаток свайпа, чтобы в ambient ничего не было смещено.
-            content.translationX = 0f
-            content.alpha = 1f
-        }
-        root.background = if (on) {
-            ColorDrawable(Color.BLACK)
-        } else {
-            screenBackground()
-        }
-        titleView.setTextColor(if (on) Ui.textTertiary else Ui.accent)
-        titleView.alpha = if (on) 0.85f else 1f
-        scroll.visibility = if (on) View.INVISIBLE else View.VISIBLE
-        dots.visibility = if (on) View.INVISIBLE else View.VISIBLE
     }
 
     // ---------- навигация по кругу ----------

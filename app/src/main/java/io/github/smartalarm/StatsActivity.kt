@@ -2,7 +2,6 @@ package io.github.smartalarm
 
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -18,7 +17,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
-import androidx.wear.ambient.AmbientLifecycleObserver
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -57,11 +55,10 @@ import java.util.Locale
  *  - точек раздела не было (наезжали на контент) → теперь контент заканчивается на 400,
  *    а точки стоят в своей полосе 412…424.
  *
- * **Состояния.** AOD через [AmbientLifecycleObserver]: чёрный фон `#000000`, притушённые
- * заголовок и график без сетки/столбиков/анимаций, остальное скрыто. Отладочный вход —
- * `adb shell am start -n io.github.smartalarm/.StatsActivity --ez force_ambient true`.
- * Навигация по кругу разделов — [SectionSwipe] (`Sections.NIGHT`), ручной разбор свайпов
- * удалён: цикл 1 → 2 → 3 → 1 обеспечивает [SwipeSections].
+ * **Содержимое.** Заголовок, карточка графика (сетка, полосы фаз, линия пульса, столбики
+ * движения, подписи времени), легенда фаз, строка «разбудил», две строки сводки, две плашки
+ * метрик и индикатор раздела. Навигация по кругу разделов — [SectionSwipe] (`Sections.NIGHT`),
+ * ручной разбор свайпов удалён: цикл 1 → 2 → 3 → 1 обеспечивает [SwipeSections].
  *
  * Данные не менялись: `probe_*.csv` из `getExternalFilesDir(null) ?: filesDir`, приоритет
  * файлу со `triggered` + `wake_phase`, [SleepStats.summarize] в фоновом `Thread`.
@@ -86,7 +83,6 @@ class StatsActivity : ComponentActivity() {
     private lateinit var dots: PageDotsView
     private lateinit var swipe: SectionSwipe
 
-    private var ambientObserver: AmbientLifecycleObserver? = null
     private val handler = Handler(Looper.getMainLooper())
 
     /** Только для подгонки кегля под ширину полосы: трекинг считаем сами. */
@@ -103,11 +99,6 @@ class StatsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
-        setupAmbient()
-        // Отладка AOD без включённого AOD на устройстве (как в HomeActivity).
-        if (intent?.getBooleanExtra("force_ambient", false) == true) {
-            handler.postDelayed({ applyAmbient(true) }, DEMO_AMBIENT_DELAY_MS)
-        }
         load()
     }
 
@@ -130,48 +121,6 @@ class StatsActivity : ComponentActivity() {
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (::swipe.isInitialized) swipe.handle(ev)
         return super.dispatchTouchEvent(ev)
-    }
-
-    // ---------- AOD ----------
-
-    private fun setupAmbient() {
-        ambientObserver = AmbientLifecycleObserver(
-            this,
-            object : AmbientLifecycleObserver.AmbientLifecycleCallback {
-                override fun onEnterAmbient(details: AmbientLifecycleObserver.AmbientDetails) {
-                    applyAmbient(true)
-                }
-
-                override fun onUpdateAmbient() {
-                    // Экран статичный: в AOD перерисовывать нечего (R9 — без анимаций).
-                }
-
-                override fun onExitAmbient() {
-                    applyAmbient(false)
-                }
-            },
-        )
-    }
-
-    /**
-     * В покое остаются только чёрный фон, притушённый заголовок и график без сетки,
-     * столбиков и анимаций: легенда, фаза, сводка, чипы и точки скрыты, чтобы AMOLED
-     * не выжигался (R9).
-     */
-    private fun applyAmbient(on: Boolean) {
-        if (!::root.isInitialized) return
-        // В AOD — только чёрный фон (R9): градиент убираем, чтобы не светить AMOLED.
-        val bg: Drawable = if (on) ColorDrawable(Color.BLACK) else screenGradient()
-        root.background = bg
-        content.background = if (on) ColorDrawable(Color.BLACK) else screenGradient()
-        titleView.setTextColor(if (on) Ui.textTertiary else Ui.accent)
-        chart.setAmbient(on)
-        val v = if (on) View.INVISIBLE else View.VISIBLE
-        legendRow.visibility = v
-        wakeView.visibility = v
-        summaryView.visibility = v
-        chipsRow.visibility = v
-        dots.visibility = v
     }
 
     // ---------- вёрстка ----------
@@ -593,9 +542,6 @@ class StatsActivity : ComponentActivity() {
         const val LEGEND_DOT_PX = 12
         const val LEGEND_DOT_GAP_PX = 6
         const val LEGEND_GAP_PX = 16
-
-        /** Задержка отладочного входа в AOD (`--ez force_ambient true`). */
-        const val DEMO_AMBIENT_DELAY_MS = 400L
 
         /** Задержка самопроверки геометрии: после первой раскладки. */
         const val GEOMETRY_CHECK_DELAY_MS = 300L

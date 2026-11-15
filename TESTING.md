@@ -122,8 +122,8 @@
 3. **Экраном управляет MCU**, `KEYCODE_WAKEUP` его не будит (признак — чёрный PNG ровно 1866 б).
    `verify-ui.ps1` обходит это через `dumpsys battery set ac 1`; зарядная анимация
    `com.heytap.wearable.offload` снимается `dumpsys battery unplug`, откат — `dumpsys battery reset`.
-4. Ambient проверяется принудительно: `adb shell am start -n io.github.smartalarm/.HomeActivity
-   --ez force_ambient true` (у остальных экранов тоже есть этот extra).
+4. AOD/ambient в приложении больше нет (это приложение, а не циферблат): экран просто гаснет
+   по системному таймауту, проверять нечего.
 5. Разделы листаются свайпом ВЛЕВО для движения вперёд: `adb shell input swipe 380 233 120 233 240`
    (старт > 70 px от края, длина ≥ 90 px). Свайп вправо — назад по кругу 1 → 3 → 2 → 1.
    Между свайпом и съёмкой не тянуть: экран гаснет через 15 с.

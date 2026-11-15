@@ -19,7 +19,6 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import androidx.wear.ambient.AmbientLifecycleObserver
 import java.util.Calendar
 import java.util.Locale
 
@@ -38,7 +37,6 @@ class HomeActivity : ComponentActivity() {
     private lateinit var cta: TextView
     private lateinit var rootFrame: FrameLayout
     private lateinit var swipe: SectionSwipe
-    private var ambient: AmbientLifecycleObserver? = null
 
     private var hour = 7
     private var minute = 0
@@ -68,56 +66,8 @@ class HomeActivity : ComponentActivity() {
         minute = Prefs.targetMinute(this)
         windowMin = Prefs.windowMin(this)
         buildUi()
-        setupAmbient()
-        // Отладка: adb shell am start -n io.github.smartalarm/.HomeActivity --ez force_ambient true
-        // Позволяет увидеть ambient-отрисовку даже при выключенном AOD на устройстве.
-        if (intent?.getBooleanExtra("force_ambient", false) == true) {
-            handler.postDelayed({ applyAmbient(true) }, 400L)
-        }
-    }
-
-    /**
-     * Ambient (AOD) по скиллу wear-os-ui, R9: в покое остаются только время и кольцо,
-     * без кнопок, градиента и пульсации — так экран не выжигает AMOLED.
-     */
-    private fun setupAmbient() {
-        val observer = AmbientLifecycleObserver(
-            this,
-            object : AmbientLifecycleObserver.AmbientLifecycleCallback {
-                override fun onEnterAmbient(details: AmbientLifecycleObserver.AmbientDetails) {
-                    applyAmbient(true)
-                }
-
-                override fun onUpdateAmbient() {
-                    refresh()
-                    dial.invalidate()
-                }
-
-                override fun onExitAmbient() {
-                    applyAmbient(false)
-                }
-            },
-        )
-        ambient = observer
-        // Без явной регистрации в lifecycle колбэки ambient не приходят: в v1 наблюдатель только
-        // создавался, поэтому настоящий AOD не включался (работал лишь отладочный force_ambient).
-        lifecycle.addObserver(observer)
-    }
-
-    private fun applyAmbient(on: Boolean) {
-        dial.setDimmed(on)
-        statusView.visibility = if (on) View.INVISIBLE else View.VISIBLE
-        windowPill.visibility = if (on) View.INVISIBLE else View.VISIBLE
-        cta.visibility = if (on) View.INVISIBLE else View.VISIBLE
-        rootFrame.background = if (on) {
-            android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#0A0A0A"))
-        } else {
-            android.graphics.drawable.GradientDrawable(
-                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(android.graphics.Color.parseColor(Ui.BG_TOP), android.graphics.Color.parseColor(Ui.BG_BOTTOM)),
-            )
-        }
-        if (!on) dial.animateRing()
+        // Ambient/AOD не поддерживаем: это приложение (будильник + лог сна), а не циферблат.
+        // Экран просто гаснет по системному таймауту — выжигать AMOLED нечем, «тихого» режима нет.
     }
 
     override fun onResume() {
@@ -169,7 +119,7 @@ class HomeActivity : ComponentActivity() {
             gravity = Gravity.CENTER
             setSingleLine(true)
         }
-        root.addView(statusView, overlay(topPx = 200, heightPx = 32))
+        root.addView(statusView, overlay(topPx = STATUS_TOP, heightPx = STATUS_H))
 
         windowPill = TextView(this).apply {
             text = "окно ±$windowMin мин"
@@ -194,10 +144,10 @@ class HomeActivity : ComponentActivity() {
                 true
             }
         }
-        root.addView(windowPill, overlay(topPx = 244, heightPx = 60))
+        root.addView(windowPill, overlay(topPx = PILL_TOP, heightPx = PILL_H))
 
         cta = TextView(this).apply {
-            textSize = 15f
+            textSize = 13f
             typeface = Ui.labelTypeface()
             letterSpacing = 0.06f
             gravity = Gravity.CENTER
@@ -208,7 +158,7 @@ class HomeActivity : ComponentActivity() {
                 onPrimary()
             }
         }
-        root.addView(cta, overlay(topPx = 314, heightPx = 96))
+        root.addView(cta, overlay(topPx = CTA_TOP, heightPx = CTA_H))
 
         // Листание разделов: свайп влево открывает историю ночи (стабильный проверенный путь).
         // Карусель (CarouselPager) оставлена в проекте, но выключена: после первого перехода
@@ -246,13 +196,27 @@ class HomeActivity : ComponentActivity() {
             val lp = view.layoutParams as FrameLayout.LayoutParams
             val top = lp.topMargin.toFloat()
             val bottom = top + lp.height
-            val safe = RoundScreen.safeRowWidth(top, bottom)
+            val safe = ringSafeWidth(top, bottom)
             lp.width = minOf(maxW, if (safe > 0f) safe else maxW).toInt()
             view.layoutParams = lp
         }
-        cap(statusView, 412f)
-        cap(windowPill, 392f)
-        cap(cta, 256f)
+        cap(statusView, W_STATUS)
+        cap(windowPill, W_PILL)
+        cap(cta, W_CTA)
+    }
+
+    /**
+     * Ширина, при которой полоса `top…bottom` ещё **не заезжает на кольцо**.
+     *
+     * В v1 капсула окна шириной 392 px и кнопка 222 px ложились концами на дугу кольца
+     * (внутренний край кольца ≈ 190 px от центра), из-за чего центр выглядел «налезающим»
+     * на кольцо. Считаем по радиусу [RING_INNER_R] = 186 px: так между контентом и дугой
+     * остаётся зазор ~4 px, и кольцо видно по всей окружности.
+     */
+    private fun ringSafeWidth(top: Float, bottom: Float): Float {
+        val dy = maxOf(kotlin.math.abs(top - CY), kotlin.math.abs(bottom - CY))
+        if (dy >= RING_INNER_R) return 0f
+        return 2f * kotlin.math.sqrt(RING_INNER_R * RING_INNER_R - dy * dy)
     }
 
 
@@ -492,5 +456,28 @@ class HomeActivity : ComponentActivity() {
     override fun onBackPressed() {
         @Suppress("DEPRECATION")
         super.onBackPressed()
+    }
+
+    private companion object {
+        /**
+         * Вертикаль центрального блока — компактнее, чем в v1: блок (статус → капсула окна →
+         * кнопка) собран в 190…388 px, чтобы целиком лежать внутри кольца и не заезжать на дугу.
+         * В v1 капсула стояла 244…304 шириной 392, и её концы ложились на кольцо.
+         */
+        const val STATUS_TOP = 192
+        const val STATUS_H = 32
+        const val PILL_TOP = 232
+        const val PILL_H = 52
+        const val CTA_TOP = 292
+        const val CTA_H = 96
+
+        /** Ширины-потолки: фактическая ширина дополнительно урезается окружностью кольца. */
+        const val W_STATUS = 340f
+        const val W_PILL = 320f
+        const val W_CTA = 205f
+
+        /** Центр экрана и внутренний радиус кольца (233 − 24 − толщина 16 − зазор 7). */
+        const val CY = 233f
+        const val RING_INNER_R = 186f
     }
 }

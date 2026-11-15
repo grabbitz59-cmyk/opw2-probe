@@ -353,7 +353,7 @@ class DialView @JvmOverloads constructor(
         /** Время: размер и вертикальный сдвиг в долях от min(w,h). */
         const val TIME_SIZE_FRAC = 0.205f
         const val DIM_TIME_SIZE_FRAC = 0.185f
-        const val TIME_Y_FRAC = 0.055f
+        const val TIME_Y_FRAC = 0.10f
 
         /** Старт дуги — 12 часов. */
         const val START_ANGLE = -90f
