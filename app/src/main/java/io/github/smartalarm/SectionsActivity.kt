@@ -49,6 +49,7 @@ class SectionsActivity : ComponentActivity() {
 
     private var dragging = false
     private var decided = false
+    private var edgeStart = false
     private var downX = 0f
     private var downY = 0f
 
@@ -141,50 +142,82 @@ class SectionsActivity : ComponentActivity() {
     // ------------------------------------------------------------------ свайп
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        handleSwipe(ev)
+        if (handleSwipe(ev)) return true
         return super.dispatchTouchEvent(ev)
     }
 
     /**
      * Свайп из центральной зоны: следуем за пальцем, на отпускании доводим до соседней страницы.
-     * Края отданы системе (старт ближе 70 px к краю не перехватываем), порог — 90 px.
+     *
+     * Края (ближе [EDGE_GUARD_PX]) — зона системного «назад»: такие касания мы забираем себе
+     * и **не отдаём детям**. Раньше они доходили до циферблата, и короткий свайп от края
+     * (система съедала часть пути, до порога перехода не доходило) превращался в тап по
+     * циферблату — открывался редактор времени. Теперь от края ничего не открывается.
+     *
+     * Возвращает `true`, если событие обработано и детям его отдавать уже нельзя.
      */
-    private fun handleSwipe(ev: MotionEvent) {
+    private fun handleSwipe(ev: MotionEvent): Boolean {
         val w = root.width.toFloat()
-        if (w <= 0f) return
+        if (w <= 0f) return false
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = ev.x
                 downY = ev.y
                 dragging = false
                 decided = false
+                edgeStart = ev.x < EDGE_GUARD_PX || ev.x > w - EDGE_GUARD_PX
                 strip.animate().cancel()
+                // Касание в зоне края забираем себе: системный жест «назад» всё равно
+                // обрабатывается системой, а циферблат не должен получить из него тап.
+                return edgeStart
             }
 
             MotionEvent.ACTION_MOVE -> {
+                if (edgeStart) return true
                 if (!decided) {
                     val ddx = ev.x - downX
-                    if (abs(ddx) < SLOP_PX) return
-                    if (abs(ddx) <= abs(ev.y - downY) * SLOPE) return
+                    if (abs(ddx) < DRAG_START_PX) return false
+                    if (abs(ddx) <= abs(ev.y - downY) * SLOPE) return false
                     decided = true
                     dragging = true
+                    // Жест стал свайпом — гасим нажатие на детях, иначе короткий свайп
+                    // сработает как клик по циферблату (редактор времени) или по капсуле.
+                    cancelChildren(ev)
                 }
                 if (dragging) strip.translationX = (ev.x - downX).coerceIn(-w, w)
+                return true
             }
 
             MotionEvent.ACTION_UP -> {
+                if (edgeStart) {
+                    edgeStart = false
+                    return true
+                }
                 if (dragging) {
                     val dx = ev.x - downX
                     if (abs(dx) >= COMMIT_PX) settle(forward = dx < 0f) else settleBack()
+                    dragging = false
+                    return true
                 }
-                dragging = false
+                return false
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                edgeStart = false
                 if (dragging) settleBack()
                 dragging = false
+                return decided
             }
         }
+        return false
+    }
+
+    /** Отменяет нажатие на дочерних View, не прерывая наш жест. */
+    private fun cancelChildren(ev: MotionEvent) {
+        val cancel = MotionEvent.obtain(ev)
+        cancel.action = MotionEvent.ACTION_CANCEL
+        super.dispatchTouchEvent(cancel)
+        cancel.recycle()
     }
 
     private fun settle(forward: Boolean) {
@@ -532,8 +565,16 @@ class SectionsActivity : ComponentActivity() {
     private companion object {
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
 
-        /** Порог, с которого жест считается горизонтальным свайпом. */
-        const val SLOP_PX = 24f
+        /**
+         * Зона края: касание, начатое ближе этого к любому краю, считается системным жестом
+         * «назад». Мы его не интерпретируем и **не отдаём детям** — иначе короткий свайп от края
+         * (система съедает часть пути, до порога перехода не доходит) превращался в тап по
+         * циферблату и открывал редактор времени будильника.
+         */
+        const val EDGE_GUARD_PX = 48f
+
+        /** Любое движение больше этого — уже свайп; нажатие на детях при этом гасится. */
+        const val DRAG_START_PX = 12f
 
         /** Длина жеста для перехода. */
         const val COMMIT_PX = 90f
