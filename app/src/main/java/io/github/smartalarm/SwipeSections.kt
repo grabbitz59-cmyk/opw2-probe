@@ -94,8 +94,10 @@ class SectionSwipe(
                     }
                     dragging = true
                 }
+                // Только сдвиг, без изменения alpha: полупрозрачный корневой ViewGroup заставляет
+                // систему каждый кадр рисовать его в offscreen-слой — на этих часах это и давало
+                // рывки. Затемнение убрано совсем, экран тянется «один в один» за пальцем.
                 content.translationX = dx
-                content.alpha = 1f - ALPHA_MAX * (kotlin.math.abs(dx) / content.width)
             }
 
             MotionEvent.ACTION_UP -> {
@@ -117,39 +119,32 @@ class SectionSwipe(
         // У Activity нет своего performHapticFeedback — вибрируем через decorView.
         activity.window?.decorView?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         val target = if (forward) Sections.next(index) else Sections.prev(index)
-        val w = if (content.width > 0) content.width.toFloat() else 466f
-        // Доводка до края (180 мс), затем старт следующего раздела со slide-переходом 220 мс.
-        content.animate()
-            .translationX(if (forward) -w else w)
-            .setDuration(COMMIT_MS)
-            .withEndAction(goTo(target, forward))
-            .start()
+        // Одно непрерывное движение вместо трёх фаз. Раньше было: свой сдвиг 180 мс, затем
+        // пауза на создание Activity (на часах это десятки-сотни мс), затем slide окна 220 мс —
+        // на стыке фаз получался рывок. Теперь окно уезжает само (slide_out), а контент уже
+        // стоит там, куда его утянул палец: движение продолжается ровно с точки отпускания.
+        goTo(target, forward)
     }
 
-    private fun goTo(section: Int, forward: Boolean): Runnable = Runnable {
+    private fun goTo(section: Int, forward: Boolean) {
         val intent = Intent(activity, Sections.classOf(section))
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         activity.startActivity(intent)
+        // Вход и выход — одинаковой длительности и одной кривой, поэтому страницы едут синхронно.
         activity.overridePendingTransition(Sections.animEnter(forward), Sections.animExit(forward))
-        // Возврат в текущий экран (если его не уничтожили) должен быть без сдвига.
-        content.post {
-            content.translationX = 0f
-            content.alpha = 1f
-        }
     }
 
     private fun revert() {
         content.animate()
             .translationX(0f)
-            .alpha(1f)
             .setDuration(REVERT_MS)
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
             .start()
     }
 
     /** Сбрасывается в onResume — на случай, если Activity вернулась с ненулевым сдвигом. */
     fun reset() {
         content.translationX = 0f
-        content.alpha = 1f
         dragging = false
         committed = false
     }
@@ -167,8 +162,6 @@ class SectionSwipe(
         /** Горизонталь должна быть заметно больше вертикали. */
         const val SLOPE = 1.4f
 
-        const val COMMIT_MS = 180L
         const val REVERT_MS = 140L
-        const val ALPHA_MAX = 0.22f
     }
 }

@@ -36,6 +36,7 @@ class HomeActivity : ComponentActivity() {
     private lateinit var windowPill: TextView
     private lateinit var cta: TextView
     private lateinit var rootFrame: FrameLayout
+    private lateinit var content: FrameLayout
     private lateinit var swipe: SectionSwipe
 
     private var hour = 7
@@ -99,6 +100,14 @@ class HomeActivity : ComponentActivity() {
         }
         rootFrame = root
 
+        // Градиент остаётся на неподвижном root, а за пальцем едет прозрачный слой с контентом.
+        // Иначе при свайпе уезжал и фон, и с края открывался чёрный прямоугольник окна — это
+        // читалось как рывок/мигание.
+        content = FrameLayout(this)
+        root.addView(content, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
+
         dial = DialView(this).apply {
             setOnClickListener { openSetup() }
             setOnLongClickListener {
@@ -107,7 +116,7 @@ class HomeActivity : ComponentActivity() {
                 true
             }
         }
-        root.addView(dial, FrameLayout.LayoutParams(
+        content.addView(dial, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
         ))
 
@@ -119,7 +128,7 @@ class HomeActivity : ComponentActivity() {
             gravity = Gravity.CENTER
             setSingleLine(true)
         }
-        root.addView(statusView, overlay(topPx = STATUS_TOP, heightPx = STATUS_H))
+        content.addView(statusView, overlay(topPx = STATUS_TOP, heightPx = STATUS_H))
 
         windowPill = TextView(this).apply {
             text = "окно ±$windowMin мин"
@@ -144,7 +153,7 @@ class HomeActivity : ComponentActivity() {
                 true
             }
         }
-        root.addView(windowPill, overlay(topPx = PILL_TOP, heightPx = PILL_H))
+        content.addView(windowPill, overlay(topPx = PILL_TOP, heightPx = PILL_H))
 
         cta = TextView(this).apply {
             textSize = 13f
@@ -158,15 +167,15 @@ class HomeActivity : ComponentActivity() {
                 onPrimary()
             }
         }
-        root.addView(cta, overlay(topPx = CTA_TOP, heightPx = CTA_H))
+        content.addView(cta, overlay(topPx = CTA_TOP, heightPx = CTA_H))
 
         // Листание разделов: свайп влево открывает историю ночи (стабильный проверенный путь).
         // Карусель (CarouselPager) оставлена в проекте, но выключена: после первого перехода
         // пейджер перестаёт получать жесты (см. трассировку carousel в alarm_debug.txt).
         // Следующий заход — на ViewPager2, где доставка касаний решена платформой.
         setContentView(root)
-        swipe = SectionSwipe(this, Sections.HOME, root)
-        root.post { applyGeometry(root) }
+        swipe = SectionSwipe(this, Sections.HOME, content)
+        content.post { applyGeometry() }
     }
 
     // ---------- листание разделов (R11–R13): циклический свайп 1 → 2 → 3 → 1 ----------
@@ -190,8 +199,8 @@ class HomeActivity : ComponentActivity() {
             topMargin = topPx
         }
 
-    /** Ширины по геометрии круга нашей модели (R1–R2). */
-    private fun applyGeometry(root: FrameLayout) {
+    /** Ширины по геометрии круга: потолок из дизайна, но не шире, чем позволяет кольцо. */
+    private fun applyGeometry() {
         fun cap(view: TextView, maxW: Float) {
             val lp = view.layoutParams as FrameLayout.LayoutParams
             val top = lp.topMargin.toFloat()
