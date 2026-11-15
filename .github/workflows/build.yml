@@ -2,7 +2,9 @@ name: build-apk
 
 on:
   push:
-    branches: [ main ]
+    # Ветка редизайна собирается до слияния в main: правило «не пушим в main, пока не проверено
+    # на устройстве» соблюдается, а APK для проверки всё равно берётся из CI.
+    branches: [ main, design-v2 ]
     tags: [ 'v*' ]
   workflow_dispatch:
 

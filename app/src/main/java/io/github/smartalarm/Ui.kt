@@ -1,89 +1,204 @@
 package io.github.smartalarm
 
+import android.content.Context
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Typeface
+import android.util.TypedValue
+import android.widget.TextView
 
 /**
- * Палитра, шрифты и метрики в одном месте — чтобы все экраны выглядели как одно приложение.
+ * Токены дизайна v2 «Ночной инструмент». Источник правды: `docs/design-v2.md`.
  *
- * Источник правды: docs/design-tokens.md. Устройство одно: OPW2, круг 466×466 px (233 dp).
- * Значения ниже — из токенов; менять их можно только вместе с токенами.
+ * Устройство одно: OnePlus Watch 2 — круг 466×466 px, 320 dpi, 1 dp = 2 px.
+ * Язык: гравированная шкала, тлеющий янтарь, бумажный condensed-шрифт, волосяные линейки.
+ * Никаких карточек, теней и градиентов: только линейка (1 px), шкала и свет.
+ *
+ * Все размеры текста — в **px** (не sp), потому что на этом экране пиксель и есть единица
+ * дизайна. Для TextView используется [TypedValue.COMPLEX_UNIT_PX].
  */
 object Ui {
 
-    // ---------- фон и поверхности ----------
-    const val BG = "#080C0E"              // запасной сплошной фон (ambient/края)
-    const val BG_TOP = "#0A0F12"          // верх градиента экрана
-    const val BG_BOTTOM = "#05080A"       // низ градиента экрана
-    const val SURFACE = "#111A1E"         // карточки
-    const val SURFACE_HI = "#18242A"      // нажатое/выделенное, фон кольца
-    const val STROKE = "#1B262B"          // обводка карточек
-    const val STROKE_HI = "#24343A"       // обводка активного
+    // ---------------------------------------------------------------- палитра
 
-    // ---------- акцент ----------
-    const val ACCENT = "#00D1A9"
-    const val ACCENT_DIM = "#00A88A"
-    const val ACCENT_SOFT = "#14322D"
-    const val ACCENT_FROM = "#22E0B4"     // градиент: начало
-    const val ACCENT_TO = "#00A9C0"       // градиент: конец
-    const val ON_ACCENT = "#04211D"       // текст на акцентной заливке
+    /** Фон всех экранов — плоский, без градиента. */
+    const val BG = "#0A0A0B"
+    const val BG_AMBIENT = "#000000"
 
-    // ---------- семантика ----------
-    const val DANGER = "#FF6B6B"
-    const val DANGER_DIM = "#C0392B"
+    /** Обод: минутные и часовые риски шкалы. */
+    const val BEZEL_MINOR = "#23262A"
+    const val BEZEL_MAJOR = "#34383D"
 
-    // ---------- фазы сна ----------
-    const val PHASE_DEEP = "#7C6BFF"
-    const val PHASE_LIGHT = "#4FC3F7"
-    const val PHASE_AWAKE = "#FFB74D"
-    const val PHASE_NONE = "#37474F"
+    /** Волосяная линейка 1 px. */
+    const val RULE = "#26272B"
+    const val RULE_STRONG = "#3A3D42"
 
-    // ---------- текст ----------
-    const val TEXT = "#F2F7F7"
-    const val TEXT_SECONDARY = "#9FB3B8"
-    const val TEXT_TERTIARY = "#5E7279"
+    /** Единственный акцент — янтарь. */
+    const val EMBER = "#FFA24C"
+    const val EMBER_HOT = "#FFD2A0"
+    const val EMBER_DIM = "#8A6034"
+    const val EMBER_ASH = "#2A2118"
+    /** Заливка неактивного рычага: замер на устройстве — `#2A2118` давал 1.25:1 к фону,
+     *  `#2E2417` — 1.30:1 (форму держала только кромка). `#3A2F20` ≈ 1.5:1: видно плашкой. */
+    const val EMBER_ASH_HI = "#3A2F20"
+    const val ON_EMBER = "#1A1206"
 
-    // ---------- метрики экрана ----------
-    /** Радиус безопасной зоны (233 − 24). */
-    const val SAFE_RADIUS_PX = 209
-    /** Полоса индикатора разделов. */
-    const val DOTS_TOP_PX = 406
-    const val DOTS_BOTTOM_PX = 426
+    /** Бумага: тёплый белый и два уровня притушённости. */
+    const val PAPER = "#F2EDE6"
+    const val PAPER_2 = "#A8A29A"
+    const val PAPER_3 = "#6E6862"
+
+    /** Семантика (не акцент): только остановка записи и отсутствие прав. */
+    const val SIGNAL_STOP = "#E8654F"
+    const val ON_STOP = "#FFF3EC"
+
+    /** Фазы сна кодируются высотой и яркостью, не оттенком (принцип 3). */
+    const val PHASE_AWAKE = "#3E4348"
+    const val PHASE_NONE = "#17191C"
+
+    // ---------------------------------------------------------------- типографика (px)
+
+    const val SZ_HERO = 104f      // время подъёма
+    const val SZ_HERO_AOD = 88f   // то же в ambient
+    const val SZ_NOW = 36f        // строка «сейчас»
+    const val SZ_STATE = 36f      // статус
+    const val SZ_LABEL = 32f      // «ПОДЪЁМ», подписи
+    const val SZ_DETAIL = 26f     // «ЧЕРЕЗ 7 Ч 12 М» (26, а не 30: длинная строка на y 330…354
+                                  // при 30 px уходила за круг — замерено на устройстве 211.9 px)
+    const val SZ_TITLE = 28f      // заголовки экранов 2–3
+    const val SZ_LEVER = 26f      // текст по дуге рычага
+    const val SZ_ROW_LABEL = 26f
+    const val SZ_ROW_VALUE = 34f
+    const val SZ_LEGEND = 26f
+    const val SZ_METRICS = 26f
+    const val SZ_BIG = 52f        // «ЛЁГКИЙ»
+    const val SZ_TELEMETRY = 24f
+    const val SZ_TELEMETRY_SMALL = 22f
+
+    const val LS_TIGHT = -0.02f
+    const val LS_NOW = 0.16f
+    const val LS_LABEL = 0.28f
+    const val LS_STATE = 0.12f
+    const val LS_DETAIL = 0.10f
+    const val LS_LEVER = 0.12f
+    const val LS_TITLE = 0.22f
+    const val LS_ROW_LABEL = 0.18f
+    const val LS_TELEMETRY = 0.06f
+
+    // ---------------------------------------------------------------- геометрия
+
+    const val CX = 233f
+    const val CY = 233f
+    /** Безопасный радиус контента: R − 24. */
+    const val SAFE_R = 209f
+    /** Внешний радиус обода (риски/дуга живут внутри 208). */
+    const val BEZEL_OUT = 208f
+    /** Внутренний радиус обода: контент не заходит внутрь этой окружности. */
+    const val BEZEL_IN = 188f
+
+    /**
+     * Полоса индикатора раздела. Не выше y 60: на y 42 точка уже вне окружности r = 188,
+     * где живёт обод, — индикатор наезжал бы на шкалу.
+     */
+    const val INDEX_TOP = 60f
+    const val INDEX_BOTTOM = 72f
+
+    // ---------------------------------------------------------------- цвета как int
 
     val bg: Int get() = Color.parseColor(BG)
-    val surface: Int get() = Color.parseColor(SURFACE)
-    val surfaceHi: Int get() = Color.parseColor(SURFACE_HI)
-    val stroke: Int get() = Color.parseColor(STROKE)
-    val accent: Int get() = Color.parseColor(ACCENT)
-    val accentDim: Int get() = Color.parseColor(ACCENT_DIM)
-    val accentSoft: Int get() = Color.parseColor(ACCENT_SOFT)
-    val accentFrom: Int get() = Color.parseColor(ACCENT_FROM)
-    val accentTo: Int get() = Color.parseColor(ACCENT_TO)
-    val onAccent: Int get() = Color.parseColor(ON_ACCENT)
-    val danger: Int get() = Color.parseColor(DANGER)
-    val text: Int get() = Color.parseColor(TEXT)
-    val textSecondary: Int get() = Color.parseColor(TEXT_SECONDARY)
-    val textTertiary: Int get() = Color.parseColor(TEXT_TERTIARY)
+    val bgAmbient: Int get() = Color.parseColor(BG_AMBIENT)
+    val bezelMinor: Int get() = Color.parseColor(BEZEL_MINOR)
+    val bezelMajor: Int get() = Color.parseColor(BEZEL_MAJOR)
+    val rule: Int get() = Color.parseColor(RULE)
+    val ember: Int get() = Color.parseColor(EMBER)
+    val emberHot: Int get() = Color.parseColor(EMBER_HOT)
+    val emberDim: Int get() = Color.parseColor(EMBER_DIM)
+    val emberAsh: Int get() = Color.parseColor(EMBER_ASH)
+    val emberAshHi: Int get() = Color.parseColor(EMBER_ASH_HI)
+    val onEmber: Int get() = Color.parseColor(ON_EMBER)
+    val paper: Int get() = Color.parseColor(PAPER)
+    val paper2: Int get() = Color.parseColor(PAPER_2)
+    val paper3: Int get() = Color.parseColor(PAPER_3)
+    val signalStop: Int get() = Color.parseColor(SIGNAL_STOP)
+    val onStop: Int get() = Color.parseColor(ON_STOP)
+    val phaseAwakeColor: Int get() = Color.parseColor(PHASE_AWAKE)
+    val phaseNoneColor: Int get() = Color.parseColor(PHASE_NONE)
 
-    val phaseDeep: Int get() = Color.parseColor(PHASE_DEEP)
-    val phaseLight: Int get() = Color.parseColor(PHASE_LIGHT)
-    val phaseAwake: Int get() = Color.parseColor(PHASE_AWAKE)
-    val phaseNone: Int get() = Color.parseColor(PHASE_NONE)
+    /** Тинт: тот же цвет с прозрачностью `alpha` (0..255). */
+    fun alpha(color: Int, alpha: Int): Int =
+        Color.argb(alpha.coerceIn(0, 255), Color.red(color), Color.green(color), Color.blue(color))
 
-    /** Тонкий шрифт для времени — как на вендорских циферблатах. */
-    fun clockTypeface(): Typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+    // ---------------------------------------------------------------- шрифты
 
-    /** Средний вес для подписей и кнопок. */
-    fun labelTypeface(): Typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+    /** Гравировка: condensed без «воздушного» light. */
+    fun condensed(): Typeface = Typeface.create("sans-serif-condensed", Typeface.NORMAL)
 
-    /** Обычный вес для длинного текста (сводка ночи). */
-    fun bodyTypeface(): Typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+    /** Более плотный вес — для значений и героя, если condensed-medium доступен. */
+    fun condensedMedium(): Typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
 
-    /** Цвет фазы сна. */
-    fun phaseColor(stage: SleepStats.Stage): Int = when (stage) {
-        SleepStats.Stage.DEEP -> phaseDeep
-        SleepStats.Stage.LIGHT -> phaseLight
-        SleepStats.Stage.AWAKE -> phaseAwake
-        SleepStats.Stage.UNKNOWN -> phaseNone
+    // ---------------------------------------------------------------- фабрики
+
+    /** Краска для canvas-текста: центрированная по X, размер в px, трекинг в em. */
+    fun textPaint(px: Float, color: Int, letterSpacing: Float = 0f): Paint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            textSize = px
+            typeface = condensed()
+            this.letterSpacing = letterSpacing
+            textAlign = Paint.Align.CENTER
+        }
+
+    /** Краска волосяной линии. */
+    fun strokePaint(color: Int, width: Float): Paint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            strokeWidth = width
+            style = Paint.Style.STROKE
+        }
+
+    /** Заливка. */
+    fun fillPaint(color: Int): Paint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            style = Paint.Style.FILL
+        }
+
+    /** TextView в токенах v2: размер в px, condensed, заданный трекинг и цвет. */
+    fun label(
+        ctx: Context,
+        text: String,
+        px: Float,
+        color: Int,
+        letterSpacing: Float = 0f,
+        caps: Boolean = false,
+    ): TextView = TextView(ctx).apply {
+        this.text = if (caps) text.uppercase() else text
+        setTextColor(color)
+        typeface = condensed()
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, px)
+        this.letterSpacing = letterSpacing
+        includeFontPadding = false
+        setSingleLine(true)
     }
+
+    /** Цвет фазы сна: один янтарь, разная яркость (см. §4.3 design-v2). */
+    fun phaseColor(stage: SleepStats.Stage): Int = when (stage) {
+        SleepStats.Stage.DEEP -> ember
+        SleepStats.Stage.LIGHT -> emberDim
+        SleepStats.Stage.AWAKE -> phaseAwakeColor
+        SleepStats.Stage.UNKNOWN -> phaseNoneColor
+    }
+
+    /** Русское короткое имя фазы для легенды и состояния. */
+    fun phaseShort(stage: SleepStats.Stage): String = when (stage) {
+        SleepStats.Stage.DEEP -> "ГЛУБ"
+        SleepStats.Stage.LIGHT -> "ЛЁГК"
+        SleepStats.Stage.AWAKE -> "БОДР"
+        SleepStats.Stage.UNKNOWN -> "—"
+    }
+
+    // ---------------------------------------------------------------- совместимость
+
+    /** Волосяная линейка повышенной яркости — разделитель блоков и дорожки слайдеров. */
+    val ruleStrong: Int get() = Color.parseColor(RULE_STRONG)
 }

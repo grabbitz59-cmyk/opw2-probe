@@ -1,298 +1,333 @@
 package io.github.smartalarm
 
-import android.content.Intent
-import android.graphics.Color
-import android.graphics.Typeface
+import android.graphics.Paint
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.wear.ambient.AmbientLifecycleObserver
 import java.io.File
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 /**
- * «Прошлая ночь»: график в духе OHealth (полоса фаз + пульс + движение) и сводка.
+ * Экран 2 «НОЧЬ» — статистика прошлой ночи (§3.3 `docs/design-v2.md`).
  *
- * Полезное здесь не только картинка: покрытие лога и доля окон со свежим пульсом
- * показывают, насколько данным можно верить.
+ * Один вопрос за 0.5 с (R5): «как я спал и в какой фазе меня разбудили». Скролла нет:
+ * гипнограмма + строка метрик + фаза подъёма. Длинная сводка (покрытие, батарея, файл)
+ * переехала в служебные строки экрана 3.
+ *
+ * Данные — те же, что были в v1: ночной `probe_*.csv` из `getExternalFilesDir(null)`,
+ * приоритет файлу со строкой `triggered` + `wake_phase`, разбор через [SleepStats].
+ * Переписана только вёрстка.
+ *
+ * Геометрия: все полосы — абсолютные `topMargin` (как в [AlarmSetupActivity]), ширина
+ * урезается так, чтобы **все четыре угла** прямоугольника лежали внутри `r = Ui.BEZEL_IN`
+ * (контент не заходит в annulus обода 188…208). Тексты дополнительно ужимаются по кеглю,
+ * поэтому в полосе не бывает многоточия.
+ *
+ * Навигация — свайпом через [SectionSwipe] (R11–R13), AOD — через [AmbientLifecycleObserver]:
+ * в покое остаются заголовок и базовая линейка гипнограммы.
  */
 class StatsActivity : ComponentActivity() {
 
-    private lateinit var chart: SleepChartView
-    private lateinit var summaryView: TextView
-    private lateinit var phasesView: TextView
-    private lateinit var efficiencyView: TextView
-    private lateinit var fileView: TextView
-    private lateinit var metricValue: TextView
-    private lateinit var metricLabel: TextView
-    private lateinit var metricValue2: TextView
-    private lateinit var metricLabel2: TextView
-    private lateinit var contentView: LinearLayout
+    private lateinit var root: FrameLayout
 
-    private val screenW: Float get() = resources.displayMetrics.widthPixels.toFloat()
+    /** Контент, который тянется за пальцем при свайпе между разделами. */
+    private lateinit var content: FrameLayout
 
-    private val timeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
-        .withZone(ZoneId.systemDefault())
+    private lateinit var index: SectionIndexView
+    private lateinit var bezel: BezelView
+    private lateinit var titleView: TextView
+    private lateinit var metricsView: TextView
+    private lateinit var chart: HypnogramView
+    private lateinit var legendRow: LinearLayout
+    private lateinit var wakeLabel: TextView
+    private lateinit var wakeValue: TextView
+    private lateinit var swipe: SectionSwipe
+
+    private var ambientObserver: AmbientLifecycleObserver? = null
+    private val handler = Handler(Looper.getMainLooper())
+
+    /** Только для измерения ширины строки; типографика — как у TextView из [Ui.label]. */
+    private val fitPaint: Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Ui.condensed()
+        textAlign = Paint.Align.LEFT
+        // Трекинг считаем сами: так `measureText` гарантированно отдаёт сумму литерал.
+        letterSpacing = 0f
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
+        setupAmbient()
+        // Отладка AOD без включённого AOD на устройстве:
+        // adb shell am start -n io.github.smartalarm/.StatsActivity --ez force_ambient true
+        if (intent?.getBooleanExtra("force_ambient", false) == true) {
+            handler.postDelayed({ applyAmbient(true) }, DEMO_AMBIENT_DELAY_MS)
+        }
         load()
     }
 
     override fun onResume() {
         super.onResume()
-        if (::contentView.isInitialized) {
-            contentView.translationX = 0f
-            contentView.alpha = 1f
-        }
+        // Возвращаемся на место после slide-перехода между разделами.
+        if (::swipe.isInitialized) swipe.reset()
     }
 
-    // ---------- циклическая прокрутка (R11–R13) ----------
-    private var swipeDownX = 0f
-    private var swipeDownY = 0f
-    private var dragging = false
+    override fun onDestroy() {
+        handler.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
 
-    /**
-     * Листание по кругу: главный --влево--> история --влево--> главный --влево--> …
-     * Горизонталь ловим только когда она заметно больше вертикали, поэтому
-     * вертикальная прокрутка текста продолжает работать.
-     */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                swipeDownX = ev.x
-                swipeDownY = ev.y
-                dragging = false
-            }
-
-            MotionEvent.ACTION_MOVE -> {
-                val dx = ev.x - swipeDownX
-                val dy = ev.y - swipeDownY
-                if (!dragging && swipeDownX > 70f &&
-                    kotlin.math.abs(dx) > 24f && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f
-                ) {
-                    dragging = true
-                }
-                if (dragging && ::contentView.isInitialized) {
-                    contentView.translationX = dx
-                    contentView.alpha = 1f - 0.25f * (kotlin.math.abs(dx) / screenW)
-                    return true
-                }
-            }
-
-            MotionEvent.ACTION_UP -> {
-                if (dragging) {
-                    dragging = false
-                    commitSwipe(ev.x - swipeDownX)
-                    return true
-                }
-            }
-
-            MotionEvent.ACTION_CANCEL -> {
-                if (dragging) {
-                    dragging = false
-                    revert()
-                    return true
-                }
-            }
-        }
+        if (::swipe.isInitialized) swipe.handle(ev)
         return super.dispatchTouchEvent(ev)
     }
 
-    private fun commitSwipe(dx: Float) {
-        if (kotlin.math.abs(dx) < 90f) {
-            revert()
-            return
-        }
-        val toLeft = dx < 0
-        contentView.animate()
-            .translationX(if (toLeft) -screenW else screenW)
-            .alpha(0.35f)
-            .setDuration(140L)
-            .withEndAction {
-                // Листаем только влево и дальше по кругу: ночь → статус
-                if (toLeft) {
-                    startActivity(Intent(this, StatusActivity::class.java))
-                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
-                } else {
-                    finish()
-                    overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+    // ---------- AOD ----------
+
+    private fun setupAmbient() {
+        ambientObserver = AmbientLifecycleObserver(
+            this,
+            object : AmbientLifecycleObserver.AmbientLifecycleCallback {
+                override fun onEnterAmbient(details: AmbientLifecycleObserver.AmbientDetails) {
+                    applyAmbient(true)
                 }
-            }
-            .start()
+
+                override fun onUpdateAmbient() {
+                    // Экран статичный: перерисовывать в AOD нечего.
+                }
+
+                override fun onExitAmbient() {
+                    applyAmbient(false)
+                }
+            },
+        )
     }
 
-    private fun revert() {
-        contentView.animate().translationX(0f).alpha(1f).setDuration(160L).start()
+    /**
+     * В покое остаются только заголовок (притушённый) и базовая линейка гипнограммы —
+     * ни подписей, ни фаз, ни янтаря: так AMOLED не выжигается.
+     */
+    private fun applyAmbient(on: Boolean) {
+        if (!::root.isInitialized || !::content.isInitialized) return
+        val bg = if (on) Ui.bgAmbient else Ui.bg
+        root.setBackgroundColor(bg)
+        content.setBackgroundColor(bg)
+        titleView.setTextColor(if (on) Ui.paper3 else Ui.ember)
+        if (::bezel.isInitialized) bezel.setAmbient(on)
+        val v = if (on) View.INVISIBLE else View.VISIBLE
+        index.visibility = v
+        metricsView.visibility = v
+        legendRow.visibility = v
+        wakeLabel.visibility = v
+        wakeValue.visibility = v
+        chart.setAmbient(on)
     }
+
+    // ---------- вёрстка ----------
 
     private fun buildUi() {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            background = verticalGradient()
-            setPadding(dp(2), dp(2), dp(2), dp(2))
-        }
-
-        root.addView(text("ПРОШЛАЯ НОЧЬ", 10f, Ui.ACCENT).apply { letterSpacing = 0.14f })
-
-        chart = SleepChartView(this)
+        // Фон плоский и лежит и на root, и на content (как в HomeActivity): при свайпе
+        // контент уезжает вместе со своим фоном, а root не даёт «дыры» на краю.
+        root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
+        content = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
         root.addView(
-            chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(70))
-                .apply { topMargin = dp(4) },
+            content,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
         )
 
-        // Легенда фаз: цветные точки + подписи
-        root.addView(
-            legendRow(),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-                .apply { topMargin = dp(8) },
+        // Обод: та же шкала 72 риски, что на главном, — иначе экраны не читаются как один прибор.
+        bezel = BezelView(this)
+        content.addView(
+            bezel,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
         )
 
-        // Две «плашки» с главными числами
-        root.addView(
-            metricsRow(),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56))
-                .apply { topMargin = dp(8) },
-        )
+        // y 60–72: индикатор раздела (2/3). Верх — из токена Ui.INDEX_TOP, не хардкод.
+        index = SectionIndexView(this).apply { active = Sections.NIGHT }
+        content.addView(index, band(top = Ui.INDEX_TOP.toInt(), height = 12, widthCap = 64f))
 
-        phasesView = text("", 10f, Ui.ACCENT).apply {
-            gravity = Gravity.START
-            setPadding(dp(4), dp(8), dp(4), 0)
-            setLineSpacing(dp(2).toFloat(), 1f)
-        }
-        root.addView(phasesView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
+        // y 96–124: заголовок.
+        titleView = label("ПРОШЛАЯ НОЧЬ", Ui.SZ_TITLE, Ui.ember, Ui.LS_TITLE)
+        content.addView(titleView, band(top = 96, height = 28, widthCap = 300f))
+        fitText(titleView, Ui.SZ_TITLE)
 
-        summaryView = text("загружаю…", 10f, Ui.TEXT_SECONDARY).apply {
-            gravity = Gravity.START
-            setPadding(dp(4), dp(6), dp(4), 0)
-            setLineSpacing(dp(2).toFloat(), 1f)
-        }
-        root.addView(summaryView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
+        // y 132–156: строка метрик «6Ч 42М · 58 УД · 92%».
+        metricsView = label("—", Ui.SZ_METRICS, Ui.paper2, Ui.LS_DETAIL)
+        content.addView(metricsView, band(top = 132, height = 24, widthCap = 320f))
 
-        efficiencyView = text("", 10f, Ui.TEXT_SECONDARY).apply {
-            gravity = Gravity.START
-            setPadding(dp(4), dp(4), dp(4), 0)
-            setLineSpacing(dp(2).toFloat(), 1f)
-        }
-        root.addView(efficiencyView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
+        // y 164–286: гипнограмма 320 × 122.
+        chart = HypnogramView(this)
+        content.addView(chart, band(top = 164, height = 122, widthCap = 320f))
 
-        fileView = text("", 8f, Ui.TEXT_TERTIARY).apply {
-            gravity = Gravity.START
-            setPadding(dp(4), dp(8), dp(4), dp(6))
-        }
-        root.addView(fileView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
+        // y 292–316: легенда тремя глифами (глубина кодируется и шириной глифа).
+        legendRow = buildLegend()
+        content.addView(legendRow, band(top = 292, height = 24, widthCap = 300f))
 
-        // Контент вписан в квадрат нашей модели (R1–R2) и прокручивается вниз:
-        // шрифт крупный, поэтому всё в один экран не влезает — это осознанно.
-        val inset = RoundScreen.inscribedInsetPx() + dp(12)
-        val outer = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = verticalGradient()
-            setPadding(inset, dp(20), inset, dp(28))
-        }
-        val scroll = android.widget.ScrollView(this).apply {
-            isFillViewport = true
-            setBackgroundColor(android.graphics.Color.TRANSPARENT)
-            isVerticalScrollBarEnabled = true
-            addView(root)
-        }
-        outer.addView(
-            scroll,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f),
-        )
+        // y 322–346: подпись фазы.
+        wakeLabel = label("РАЗБУДИЛ В ФАЗЕ", Ui.SZ_LEGEND, Ui.paper3, Ui.LS_DETAIL)
+        content.addView(wakeLabel, band(top = 322, height = 24, widthCap = 300f))
+        fitText(wakeLabel, Ui.SZ_LEGEND)
 
-        contentView = outer
-        // Индикатор разделов убран: в нижней полосе он перекрывал текст сводки
-        // (лимит круга там ~150 px), листание остаётся свайпом влево.
-        val frame = android.widget.FrameLayout(this).apply {
-            background = verticalGradient()
-            addView(outer)
-        }
-        setContentView(frame)
+        // y 348–396: значение фазы. Ширина ≤ 187 px — короткие формы («ЛЁГК.», «ГЛУБ.», «БОДР.»).
+        wakeValue = label("—", Ui.SZ_BIG, Ui.ember, 0f)
+        content.addView(wakeValue, band(top = 348, height = 48, widthCap = 187f))
+
+        swipe = SectionSwipe(this, Sections.NIGHT, content)
+        setContentView(root)
     }
 
-    /** Фон экрана: глубокий вертикальный градиент из токенов. */
-    private fun verticalGradient(): android.graphics.drawable.GradientDrawable =
-        android.graphics.drawable.GradientDrawable(
-            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(android.graphics.Color.parseColor(Ui.BG_TOP), android.graphics.Color.parseColor(Ui.BG_BOTTOM)),
-        )
+    /** TextView в токенах v2: caps, трекинг, центр — фабрика [Ui.label]. */
+    private fun label(text: String, px: Float, color: Int, letterSpacing: Float): TextView =
+        Ui.label(this, text, px, color, letterSpacing, caps = true).apply {
+            gravity = Gravity.CENTER
+            // Последний рубеж: если кегль уже минимальный, длинная строка получит многоточие.
+            ellipsize = TextUtils.TruncateAt.END
+        }
 
-    /** Легенда: ● глубокий ● лёгкий ● бодрствование. */
-    private fun legendRow(): LinearLayout {
+    /**
+     * Полоса `top…top+height` с абсолютной позицией (как в [AlarmSetupActivity]) и шириной,
+     * урезанной так, чтобы прямоугольник целиком лежал внутри окружности обода `r = 188`,
+     * но не шире таблицы дизайна.
+     */
+    private fun band(top: Int, height: Int, widthCap: Float): FrameLayout.LayoutParams {
+        val lp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            topMargin = top
+        }
+        val bottom = (top + height).toFloat()
+        // Модель RoundScreen (R = 209) — базовая; annulus обода (R = 188) жёстче, берём её.
+        val inModel = RoundScreen.safeRowWidth(top.toFloat(), bottom)
+        val insideBezel = safeRowWidthBezel(top.toFloat(), bottom)
+        val safe = minOf(inModel, insideBezel) - ROW_SIDE_PAD_PX
+        lp.width = if (safe > 0f) {
+            minOf(widthCap, safe).toInt().coerceAtLeast(1)
+        } else {
+            widthCap.toInt()
+        }
+        return lp
+    }
+
+    /**
+     * Максимальная ширина полосы, у которой **все четыре угла** лежат внутри `r = Ui.BEZEL_IN`
+     * (188 px): контент не заходит в annulus обода 188…208 даже по диагонали.
+     */
+    private fun safeRowWidthBezel(top: Float, bottom: Float): Float {
+        val dyMax = maxOf(abs(top - Ui.CY), abs(bottom - Ui.CY))
+        if (dyMax >= Ui.BEZEL_IN) return 0f
+        val r = Ui.BEZEL_IN
+        return 2f * sqrt(r * r - dyMax * dyMax)
+    }
+
+    /**
+     * Ужимает кегль под фактическую ширину полосы: caps + tracking в этой типографике широкие,
+     * а строка обязана влезть целиком — без многоточия и без выхода за обод.
+     * Ниже 24 px (§2.2 design-v2) не опускаемся.
+     */
+    private fun fitText(view: TextView, preferPx: Float) {
+        val lp = view.layoutParams
+        if (lp == null || lp.width <= 0) return
+        val maxW = (lp.width - TEXT_SIDE_PAD_PX).toFloat()
+        if (maxW <= 0f) return
+        val text = view.text.toString()
+        if (text.isEmpty()) return
+        var size = preferPx
+        while (size > Ui.SZ_TELEMETRY) {
+            if (measuredWidth(text, size, view.letterSpacing) <= maxW) break
+            size -= 1f
+        }
+        view.setTextSize(TypedValue.COMPLEX_UNIT_PX, size)
+    }
+
+    /** Ширина строки: сумма литерал + tracking (в `Paint.measureText` трекинга нет). */
+    private fun measuredWidth(text: String, px: Float, letterSpacing: Float): Float {
+        fitPaint.textSize = px
+        val tracking = px * letterSpacing * text.length
+        return fitPaint.measureText(text) + tracking
+    }
+
+    /**
+     * Легенда: три пары «глиф + подпись». Ширина глифа кодирует глубину
+     * (▍ глубже ▎ ▏), цвет — фаза из `Ui.phaseColor`, подпись — `Ui.phaseShort`.
+     */
+    private fun buildLegend(): LinearLayout {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        data class Item(val color: Int, val label: String)
-        listOf(
-            Item(Ui.phaseDeep, "глубокий"),
-            Item(Ui.phaseLight, "лёгкий"),
-            Item(Ui.phaseAwake, "бодрств."),
-        ).forEach { item ->
+        val glyphs = arrayOf("▍", "▎", "▏")
+        val colors = intArrayOf(Ui.ember, Ui.emberDim, Ui.phaseAwakeColor)
+        val stages = arrayOf(SleepStats.Stage.DEEP, SleepStats.Stage.LIGHT, SleepStats.Stage.AWAKE)
+
+        for (i in stages.indices) {
             val cell = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(2), 0, dp(2), 0)
+                if (i > 0) setPadding(LEGEND_GAP_PX, 0, 0, 0)
             }
-            cell.addView(android.view.View(this).apply {
-                background = android.graphics.drawable.GradientDrawable().apply {
-                    shape = android.graphics.drawable.GradientDrawable.OVAL
-                    setColor(item.color)
-                }
-                layoutParams = LinearLayout.LayoutParams(dp(8), dp(8)).apply { rightMargin = dp(4) }
-            })
-            cell.addView(text(item.label, 8f, Ui.TEXT_SECONDARY).apply { gravity = Gravity.CENTER_VERTICAL })
-            row.addView(cell)
+
+            val glyph = TextView(this).apply {
+                text = glyphs[i]
+                setTextColor(colors[i])
+                typeface = Ui.condensed()
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, Ui.SZ_LEGEND)
+                letterSpacing = 0f
+                includeFontPadding = false
+                setSingleLine(true)
+                gravity = Gravity.CENTER
+            }
+            val caption = Ui.label(
+                this,
+                Ui.phaseShort(stages[i]),
+                Ui.SZ_LEGEND,
+                Ui.paper3,
+                Ui.LS_DETAIL,
+                caps = true,
+            ).apply { gravity = Gravity.CENTER }
+
+            cell.addView(
+                glyph,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ).apply { rightMargin = GLYPH_GAP_PX },
+            )
+            cell.addView(
+                caption,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+            row.addView(
+                cell,
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
         }
         return row
     }
 
-    /** Две плашки: эффективность и пробуждения — крупными числами. */
-    private fun metricsRow(): LinearLayout {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-        }
-        metricValue = text("—", 20f, Ui.TEXT).apply { typeface = Ui.clockTypeface() }
-        metricLabel = text("эффективность", 8f, Ui.TEXT_SECONDARY)
-        metricValue2 = text("—", 20f, Ui.TEXT).apply { typeface = Ui.clockTypeface() }
-        metricLabel2 = text("пробуждений", 8f, Ui.TEXT_SECONDARY)
-        row.addView(chip(metricValue, metricLabel), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { rightMargin = dp(4) })
-        row.addView(chip(metricValue2, metricLabel2), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { leftMargin = dp(4) })
-        return row
-    }
-
-    private fun chip(value: TextView, label: TextView): LinearLayout =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            background = android.graphics.drawable.GradientDrawable().apply {
-                cornerRadius = dp(14).toFloat()
-                setColor(Ui.surface)
-                setStroke(2, Ui.stroke)
-            }
-            addView(value)
-            addView(label)
-        }
+    // ---------- данные (сохранено из v1) ----------
 
     private fun load() {
         Thread {
@@ -307,67 +342,44 @@ class StatsActivity : ComponentActivity() {
     }
 
     private fun render(file: File?, n: SleepStats.Night?) {
+        chart.setNight(n)
         if (file == null || n == null) {
-            chart.setNight(null)
-            summaryView.text = "Нет ночного лога.\nЗапусти ночь на главном экране —\n" +
-                "утром здесь появится график пульса и движений."
-            phasesView.text = ""
-            efficiencyView.text = ""
-            fileView.text = ""
+            // Нет лога: гипнограмма рисует «НЕТ ДАННЫХ», метрики и фаза — прочерк.
+            metricsView.text = "—"
+            fitText(metricsView, Ui.SZ_METRICS)
+            wakeValue.text = "—"
+            fitText(wakeValue, Ui.SZ_BIG)
             return
         }
-
-        chart.setNight(n)
-        val durationMin = (n.endTs - n.startTs) / 60000
-        val battery = if (n.batteryStart >= 0 && n.batteryEnd >= 0) {
-            "${n.batteryStart}% → ${n.batteryEnd}% (−${n.batteryStart - n.batteryEnd}%)"
-        } else {
-            "н/д"
-        }
-        val hrLine = if (n.hrMin > 0) {
-            "Пульс: ${n.hrMin}–${n.hrMax}, средний ${n.hrAvg}"
-        } else {
-            "Пульс: нет данных"
-        }
-        val hrCov = SleepStats.hrCoveragePct(n)
-
-        val sb = StringBuilder()
-        sb.appendLine("${timeFmt.format(Instant.ofEpochMilli(n.startTs))}–" +
-            "${timeFmt.format(Instant.ofEpochMilli(n.endTs))} · " +
-            "${durationMin / 60}ч ${durationMin % 60}м · окон ${n.rows}")
-        sb.appendLine(hrLine + " · окна с пульсом ${hrCov.toInt()}%")
-        sb.appendLine("Пробуждений: ${n.awakenings} · движение ${n.motionPct.toInt()}% окон")
-        sb.appendLine("Батарея: $battery" + if (n.alarmFired) " · будильник сработал" else "")
-        summaryView.text = sb.toString().trim()
-
-        // Фаза, в которой разбудил будильник (по HR + движению в этот момент)
-        metricValue.text = "${n.efficiencyPct.toInt()}%"
-        metricValue2.text = "${n.awakenings}"
-        phasesView.text = buildString {
-            if (n.wakePhase != SleepStats.Stage.UNKNOWN) {
-                append("Разбудил в фазе: ").append(PhaseEstimator.label(n.wakePhase))
-                if (n.wakeHr > 0) append(" · пульс ").append(n.wakeHr)
-                append("\n")
-            }
-            append("≈ глубокий ").append(hm(n.deepMin))
-            append(" · лёгкий ").append(hm(n.lightMin))
-            append(" · бодрств. ").append(hm(n.awakeMin))
-        }
-        efficiencyView.text = buildString {
-            append("Эффективность ").append(n.efficiencyPct.toInt()).append('%')
-            append(" · самый спокойный отрезок ").append(hm(n.longestQuietMin))
-        }
-
-        summaryView.append(
-            "\nПокрытие лога: ${n.coveragePct.toInt()}%" +
-                if (n.coveragePct < 95) "  ← неполная ночь" else "  ✓"
-        )
-
-        fileView.text = "файл: ${file.name}"
+        metricsView.text = metricsText(n)
+        fitText(metricsView, Ui.SZ_METRICS)
+        wakeValue.text = wakePhaseText(n.wakePhase)
+        fitText(wakeValue, Ui.SZ_BIG)
     }
 
-    private fun hm(minutes: Int): String =
-        if (minutes < 60) "${minutes}м" else "${minutes / 60}ч ${minutes % 60}м"
+    /** «6Ч 42М · 58 УД · 92%»: сон · средний пульс · эффективность; неизвестное — «—». */
+    private fun metricsText(n: SleepStats.Night): String {
+        val duration = hmCaps(n.durationMin)
+        val hr = if (n.hrAvg > 0) "${n.hrAvg} УД" else "—"
+        val eff = if (n.efficiencyPct > 0.0) "${n.efficiencyPct.toInt()}%" else "—"
+        return "$duration · $hr · $eff"
+    }
+
+    private fun hmCaps(totalMin: Int): String {
+        val m = totalMin.coerceAtLeast(0)
+        return "${m / 60}Ч ${m % 60}М"
+    }
+
+    /**
+     * Фаза подъёма в 52 px при ширине ≤ 187 px: полное «БОДРСТВОВАНИЕ» физически не влезает,
+     * поэтому короткие формы (≤ 5 символов) — 52 px остаётся кеглем героя этой строки.
+     */
+    private fun wakePhaseText(stage: SleepStats.Stage): String = when (stage) {
+        SleepStats.Stage.DEEP -> "ГЛУБ."
+        SleepStats.Stage.LIGHT -> "ЛЁГК."
+        SleepStats.Stage.AWAKE -> "БОДР."
+        SleepStats.Stage.UNKNOWN -> "—"
+    }
 
     /**
      * Выбор файла ночи: приоритет — файл, в котором есть строка срабатывания с записанной
@@ -396,15 +408,16 @@ class StatsActivity : ComponentActivity() {
         false
     }
 
-    private fun text(value: String, size: Float, color: String): TextView = TextView(this).apply {
-        text = value
-        textSize = size
-        setTextColor(Color.parseColor(color))
-        gravity = Gravity.CENTER
-        typeface = Typeface.DEFAULT
-    }
+    private companion object {
+        const val DEMO_AMBIENT_DELAY_MS = 400L
 
-    private fun dp(v: Int): Int = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics,
-    ).toInt()
+        /** Зазор между прямоугольником полосы и окружностью обода r = 188. */
+        const val ROW_SIDE_PAD_PX = 8f
+
+        /** Запас внутри TextView при ужатии кегля. */
+        const val TEXT_SIDE_PAD_PX = 2
+
+        const val LEGEND_GAP_PX = 14
+        const val GLYPH_GAP_PX = 2
+    }
 }

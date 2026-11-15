@@ -1,10 +1,12 @@
 package io.github.smartalarm
 
 import android.content.Intent
-import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
@@ -12,13 +14,20 @@ import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 /**
- * Выбор времени будильника слайдами: часы и минуты тянутся пальцем,
- * крупное время сверху показывает результат.
+ * Редактор времени подъёма в языке v2 «Ночной инструмент».
  *
- * Геометрия — по скиллу wear-os-ui для нашей модели: всё в средней полосе круга,
- * кнопка 44 dp, ширины считаются через [RoundScreen].
+ * Смысл прежний: часы 0–23 и минуты 0–55 тянутся пальцем (долгое нажатие по шкале минут
+ * переключает шаг 5 ↔ 1), крупное время сверху показывает результат, «СОХРАНИТЬ И СПАТЬ»
+ * взводит будильник и запускает ночной лог (`saveAndSleep()` — логика не менялась).
+ *
+ * Изменился только язык: плоский фон `bg`, герой `hero_time` (104 px, condensed, `paper`),
+ * подпись `row_label` капителью, кнопка — прямоугольная плита `ember_ash` с обводкой `ember`
+ * без скругления (radius 0), при нажатии — заливка `ember` и текст `on_ember` (мгновенно).
+ * Геометрия полос повторяет прежнюю: R1 (`r ≤ 209`) проверяется в [at].
  */
 class AlarmSetupActivity : ComponentActivity() {
 
@@ -37,15 +46,17 @@ class AlarmSetupActivity : ComponentActivity() {
     private fun buildUi() {
         val root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
 
-        root.addView(label("БУДИЛЬНИК · ТАП И ТЯНИ ↑↓"), at(topPx = 44, heightPx = 22))
+        // Надпись над героем — та же роль, что label_caps на экране «ПОДЪЁМ».
+        root.addView(
+            Ui.label(this, "ПОДЪЁМ", Ui.SZ_ROW_LABEL, Ui.paper3, Ui.LS_ROW_LABEL, caps = true)
+                .apply { gravity = Gravity.CENTER },
+            at(topPx = 44, heightPx = 30),
+        )
 
-        timeView = TextView(this).apply {
-            typeface = Ui.clockTypeface()
-            setTextColor(Ui.text)
-            textSize = 40f
+        timeView = Ui.label(this, "", Ui.SZ_HERO, Ui.paper, Ui.LS_TIGHT).apply {
             gravity = Gravity.CENTER
         }
-        root.addView(timeView, at(topPx = 66, heightPx = 90))
+        root.addView(timeView, at(topPx = 80, heightPx = 88))
 
         val hourSlider = SliderRowView(this).apply {
             label = "часы"
@@ -59,7 +70,7 @@ class AlarmSetupActivity : ComponentActivity() {
                 renderTime()
             }
         }
-        root.addView(hourSlider, at(topPx = 168, heightPx = 68, widthCap = 380f))
+        root.addView(hourSlider, at(topPx = 172, heightPx = 72, capPx = 380f))
 
         val minuteSlider = SliderRowView(this).apply {
             label = "минуты · шаг 5"
@@ -83,50 +94,67 @@ class AlarmSetupActivity : ComponentActivity() {
                 renderTime()
             }
         }
-        root.addView(minuteSlider, at(topPx = 242, heightPx = 68, widthCap = 380f))
+        root.addView(minuteSlider, at(topPx = 246, heightPx = 72, capPx = 380f))
 
+        // Плита главного действия: прямоугольник без скругления, обводка `ember`.
         val cta = TextView(this).apply {
             text = "СОХРАНИТЬ И СПАТЬ"
-            textSize = 12f
-            typeface = Ui.labelTypeface()
-            letterSpacing = 0.05f
+            typeface = Ui.condensed()
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, Ui.SZ_LEVER)
+            letterSpacing = Ui.LS_LEVER
+            includeFontPadding = false
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#04211D"))
-            setBackgroundResource(R.drawable.bg_cta)
+            setLineSpacing(2f, 1f)
+            setTextColor(Ui.ember)
+            background = ctaBackground(pressed = false)
+            setOnTouchListener { v, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> setCtaStyle(v as TextView, pressed = true)
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                        setCtaStyle(v as TextView, pressed = false)
+                    else -> Unit
+                }
+                false
+            }
             setOnClickListener {
                 performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                 saveAndSleep()
             }
         }
-        root.addView(cta, at(topPx = 322, heightPx = 88, widthCap = 216f))
+        root.addView(cta, at(topPx = 322, heightPx = 96))
 
         setContentView(root)
         renderTime()
     }
 
-    private fun label(text: String): TextView = TextView(this).apply {
-        this.text = text
-        textSize = 9f
-        letterSpacing = 0.18f
-        typeface = Ui.labelTypeface()
-        setTextColor(Ui.accent)
-        gravity = Gravity.CENTER
+    /** Плита действия: заливка `ember_ash` / при нажатии `ember`, обводка 2 px `ember`, radius 0. */
+    private fun ctaBackground(pressed: Boolean): GradientDrawable = GradientDrawable().apply {
+        cornerRadius = 0f
+        setColor(if (pressed) Ui.ember else Ui.emberAsh)
+        setStroke(2, Ui.ember)
     }
 
-    /** Абсолютная позиция + ширина, урезанная по кругу (R1–R2). */
-    private fun at(topPx: Int, heightPx: Int, widthCap: Float? = null): FrameLayout.LayoutParams {
-        val lp = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, heightPx,
-        ).apply {
+    private fun setCtaStyle(view: TextView, pressed: Boolean) {
+        view.background = ctaBackground(pressed)
+        view.setTextColor(if (pressed) Ui.onEmber else Ui.ember)
+    }
+
+    /**
+     * Абсолютная полоса: `topMargin` в px, ширина урезана кругом (R1: `r = 209`).
+     * Отступ 8 px от окружности — запас на сглаживание и на «оптический» край.
+     */
+    private fun at(topPx: Int, heightPx: Int, capPx: Float? = null): FrameLayout.LayoutParams {
+        val lp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, heightPx).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             topMargin = topPx
         }
-        val safe = RoundScreen.safeRowWidth(topPx.toFloat(), (topPx + heightPx).toFloat())
+        val dy = maxOf(abs(topPx - Ui.CY), abs((topPx + heightPx) - Ui.CY))
+        val fit = if (dy >= Ui.SAFE_R) 0f else 2f * sqrt(Ui.SAFE_R * Ui.SAFE_R - dy * dy)
+        val cap = capPx ?: Float.MAX_VALUE
         lp.width = when {
-            safe <= 0f && widthCap == null -> ViewGroup.LayoutParams.MATCH_PARENT
-            safe <= 0f -> widthCap!!.toInt()
-            widthCap != null -> minOf(widthCap, safe).toInt()
-            else -> safe.toInt()
+            fit > 1f -> minOf(cap, fit - MARGIN_PX).toInt().coerceAtLeast(1)
+            capPx != null -> capPx.toInt()
+            else -> ViewGroup.LayoutParams.MATCH_PARENT
         }
         return lp
     }
@@ -166,5 +194,10 @@ class AlarmSetupActivity : ComponentActivity() {
         } catch (_: Throwable) {
         }
         finish()
+    }
+
+    private companion object {
+        /** Запас от окружности R1: контент не прилипает к дуге. */
+        const val MARGIN_PX = 8f
     }
 }
