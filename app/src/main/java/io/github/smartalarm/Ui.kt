@@ -197,4 +197,3 @@ object Ui {
     /** Волосяная линейка повышенной яркости — разделитель блоков и дорожки слайдеров. */
     val ruleStrong: Int get() = Color.parseColor(RULE_STRONG)
 }
-}

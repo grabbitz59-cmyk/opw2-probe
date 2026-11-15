@@ -309,7 +309,8 @@ class StatusActivity : ComponentActivity() {
     private fun requestMissingPerms() {
         val missing = missingPerms()
         if (missing.isEmpty()) return
-        performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+        // У Activity нет своего performHapticFeedback — вибрируем через decorView.
+        window?.decorView?.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
         permLauncher.launch(missing.toTypedArray())
     }
 
