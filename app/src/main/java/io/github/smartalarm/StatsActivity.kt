@@ -217,7 +217,7 @@ class StatsActivity : ComponentActivity() {
 
         // 7. Индикатор раздела 2/3 — отдельная полоса под контентом (y 412…424),
         //    поэтому он больше не наезжает ни на сводку, ни на чипы.
-        dots = PageDotsView(this).apply { setPage(Sections.NIGHT, SECTIONS_TOTAL) }
+        dots = PageDotsView(this).apply { setSection(Sections.NIGHT, SECTIONS_TOTAL) }
         root.addView(dots, band(BAND_DOTS_TOP, BAND_DOTS_BOTTOM, W_DOTS))
 
         swipe = SectionSwipe(this, Sections.NIGHT, content)

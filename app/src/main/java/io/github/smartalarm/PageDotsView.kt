@@ -41,6 +41,15 @@ class PageDotsView @JvmOverloads constructor(
         })
     }
 
+    /**
+     * Номер раздела — **1-based** (как `Sections.HOME/NIGHT/PULT`), внутри переводится в индекс.
+     * Иначе индикатор подсвечивал соседний слот: при `setPage(2)` активной становилась вторая
+     * точка, а при `setPage(3)` активной не было вовсе (замерено на устройстве).
+     */
+    fun setSection(section: Int, pages: Int = 3) {
+        setPage(section - 1, pages)
+    }
+
     fun setPage(index: Int, pages: Int = 3) {
         if (index == current && pages == total) return
         current = index

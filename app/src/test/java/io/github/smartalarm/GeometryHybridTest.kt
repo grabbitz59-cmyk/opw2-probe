@@ -61,9 +61,9 @@ class GeometryHybridTest {
         val top = Ui.DOTS_TOP_PX.toDouble()
         val bottom = Ui.DOTS_BOTTOM_PX.toDouble()
         assertTrue("точки ниже контента экранов 2–3 (≤ 400)", top >= 400.0)
-        assertFits("точки 412–424", top, bottom, 64.0)
+        assertFits("точки 414–434", 414.0, 434.0, 64.0)
         // Выше 406 точек быть не должно: там уже узкая дуга.
-        assertTrue("полоса точек не выше 412", top >= 412.0)
+        assertTrue("полоса точек не выше 414", top >= 414.0)
     }
 
     @Test

@@ -193,7 +193,7 @@ class StatusActivity : ComponentActivity() {
         // Индикатор разделов: полоса 408…428 px, центр точек 418 (полоса 412…424 требований),
         // ширина 64 px, по центру экрана.
         dots = PageDotsView(this).apply {
-            setPage(Sections.PULT, 3)
+            setSection(Sections.PULT, 3)
         }
         content.addView(dots, band(DOTS_W, DOTS_TOP, DOTS_H))
 
@@ -303,11 +303,12 @@ class StatusActivity : ComponentActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(6), 0, dp(7), 0)
             background = rowBackground()
-            // Тап-зона — вся строка (72 px = 36 dp, требование R3 уходит с запасом).
-            // Тап перечитывает данные; пересборку откладываем до конца обработки касания.
-            isClickable = true
+            // Строки v1 — только информация (настроек нет), поэтому НЕ clickable: раньше здесь
+            // висел OnClickListener, который лишь перерисовывал те же значения — тап выглядел
+            // «мёртвым» (проверено на устройстве: в a11y-дереве clickable=false и нет эффекта).
+            // Высота 72 px (36 dp) оставлена для читаемости и на случай будущего действия.
+            isClickable = false
             isFocusable = false
-            setOnClickListener { scroll.post { refreshRows() } }
         }
         card.addView(
             View(this).apply {
@@ -414,7 +415,7 @@ class StatusActivity : ComponentActivity() {
     /** Метрики экрана в px (OPW2: 466×466, 1 dp = 2 px). */
     private companion object {
         /** Полоса заголовка: 96…124 px. */
-        const val TITLE_TOP = 96
+        const val TITLE_TOP = 98
         const val TITLE_H = 28
         const val TITLE_TEXT_PX = 22f
 
