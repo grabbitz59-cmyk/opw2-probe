@@ -151,7 +151,8 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
 
         // 6. Плашки метрик: число 44 px + подпись, y 322…400.
         chipsRow = buildChips()
-        page.addView(chipsRow, band(BAND_CHIPS_TOP, BAND_CHIPS_BOTTOM, W_CHIPS))
+        // Плашки метрик (322…400) убраны: место отдано графику — он стал главным элементом,
+        // а «эффективность/пробуждения» теперь в строке сводки. chipsRow строится, но не добавляется.
 
         // 7. Индикатор раздела рисует хост (`SectionsActivity`) один на всё приложение
         //    в полосе y 414…434 — второй экземпляр здесь дублировал бы те же три точки.
@@ -474,13 +475,13 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         const val BAND_TITLE_TOP = 90
         const val BAND_TITLE_BOTTOM = 118
         const val BAND_CHART_TOP = 122
-        const val BAND_CHART_BOTTOM = 214
-        const val BAND_LEGEND_TOP = 218
-        const val BAND_LEGEND_BOTTOM = 240
-        const val BAND_WAKE_TOP = 244
-        const val BAND_WAKE_BOTTOM = 268
-        const val BAND_SUMMARY_TOP = 272
-        const val BAND_SUMMARY_BOTTOM = 318
+        const val BAND_CHART_BOTTOM = 290
+        const val BAND_LEGEND_TOP = 294
+        const val BAND_LEGEND_BOTTOM = 318
+        const val BAND_WAKE_TOP = 322
+        const val BAND_WAKE_BOTTOM = 346
+        const val BAND_SUMMARY_TOP = 352
+        const val BAND_SUMMARY_BOTTOM = 390
         const val BAND_CHIPS_TOP = 322
         const val BAND_CHIPS_BOTTOM = 400
         const val BAND_DOTS_TOP = 414
@@ -488,10 +489,10 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
 
         // ---------- ширины полос, px (все ≤ safeRowWidth своей полосы) ----------
         const val W_TITLE = 260f
-        const val W_CHART = 336f
+        const val W_CHART = 340f
         const val W_LEGEND = 300f
         const val W_WAKE = 312f
-        const val W_SUMMARY = 330f
+        const val W_SUMMARY = 268f
         const val W_CHIPS = 242f
         const val W_DOTS = 64f
 

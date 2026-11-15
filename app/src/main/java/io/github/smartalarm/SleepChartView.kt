@@ -66,7 +66,7 @@ class SleepChartView @JvmOverloads constructor(
     }
     private val hrPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Ui.accent
-        strokeWidth = 3f
+        strokeWidth = 4f
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
@@ -137,21 +137,30 @@ class SleepChartView @JvmOverloads constructor(
         canvas.drawRoundRect(cardRect, radius, radius, cardPaint)
         canvas.drawRoundRect(cardRect, radius, radius, cardStroke)
 
-        // Внутренние полосы карточки — как в шапке класса.
-        val plotL = PAD_X * sx
-        val plotR = w - PAD_X * sx
+        // Раскладка считается от фактической высоты, а не от логической сетки: карточка
+        // выросла с 92 до 168 px, и «растягивать» всё пропорционально нельзя — подписи
+        // времени от такого масштаба становились гигантскими. Теперь полосы пропорциональны,
+        // а кегли фиксированные.
+        val plotL = PAD_X
+        val plotR = (w - PAD_X).coerceAtLeast(plotL + 1f)
         val plotW = (plotR - plotL).coerceAtLeast(1f)
-        val stripTop = STRIP_TOP * sy
-        val stripBottom = stripTop + STRIP_H * sy
-        val hrTop = HR_TOP * sy
-        val hrBottom = HR_BOTTOM * sy
-        val motionBottom = MOTION_BOTTOM * sy
-        val timeY = TIME_BASELINE * sy
+        // Внизу — место под две подписи времени.
+        val plotBottom = (h - PAD_Y - TIME_PX).coerceAtLeast(PAD_Y + 24f)
+        val plotH = (plotBottom - PAD_Y).coerceAtLeast(24f)
+
+        val stripTop = PAD_Y
+        val stripH = (plotH * PHASE_FRAC).coerceAtLeast(22f)
+        val stripBottom = stripTop + stripH
+        val hrTop = stripBottom + GAP
+        val hrBottom = (hrTop + (plotBottom - hrTop) * HR_FRAC).coerceAtLeast(hrTop + 18f)
+        val motionTop = hrBottom + GAP
+        val motionBottom = plotBottom
+        val timeY = h - TIME_PX * 0.35f
 
         val n = night
         if (n == null || n.series.size < 2) {
             // «Нет данных» — не пустота: v1 рисовал здесь пустую карточку.
-            emptyPaint.textSize = EMPTY_PX * sy
+            emptyPaint.textSize = EMPTY_PX
             emptyPaint.color = Ui.textTertiary
             emptyPaint.alpha = if (ambient) AMBIENT_ALPHA else 255
             canvas.drawText(
@@ -244,7 +253,7 @@ class SleepChartView @JvmOverloads constructor(
         // ---------- 4. столбики движения (Ui.surfaceHi), в ambient не рисуем ----------
         if (!ambient) {
             val maxMoves = n.series.maxOfOrNull { ArousalMath.movesPct(it.n, it.moves) } ?: 0.0
-            val barBand = (motionBottom - MOTION_TOP * sy).coerceAtLeast(1f)
+            val barBand = (motionBottom - motionTop).coerceAtLeast(1f)
             motionPaint.color = Ui.surfaceHi
             for (row in n.series) {
                 if (!SleepStats.isMotion(row)) continue
@@ -277,7 +286,7 @@ class SleepChartView @JvmOverloads constructor(
         }
 
         // ---------- 6. время начала и конца: единственные подписи в карточке ----------
-        timePaint.textSize = TIME_PX * sy
+        timePaint.textSize = TIME_PX
         timePaint.color = Ui.textTertiary
         timePaint.alpha = tone
         timePaint.textAlign = Paint.Align.LEFT
@@ -289,14 +298,18 @@ class SleepChartView @JvmOverloads constructor(
 
     private companion object {
         /** Логическая сетка карточки: полоса экрана 2 — y 122…214, ширина 336 px. */
-        const val LOGICAL_W = 336f
-        const val LOGICAL_H = 92f
+        const val LOGICAL_W = 340f
+        const val LOGICAL_H = 168f
 
         /** Радиус карточки 16 dp = 32 px. */
         const val CARD_RADIUS = 32f
 
         /** Внутренние отступы и полосы, логические px. */
         const val PAD_X = 18f
+        const val PAD_Y = 12f
+        const val PHASE_FRAC = 0.20f
+        const val HR_FRAC = 0.55f
+        const val GAP = 8f
         const val STRIP_TOP = 10f
         const val STRIP_H = 18f
         const val HR_TOP = 34f
@@ -306,8 +319,8 @@ class SleepChartView @JvmOverloads constructor(
         const val TIME_BASELINE = 84f
 
         /** Кегли подписей, px. */
-        const val TIME_PX = 16f
-        const val EMPTY_PX = 22f
+        const val TIME_PX = 18f
+        const val EMPTY_PX = 24f
 
         /** Альфа полосы фаз в норме и всё притушенное в AOD. */
         const val PHASE_ALPHA = 235
