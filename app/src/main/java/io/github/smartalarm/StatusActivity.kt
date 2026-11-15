@@ -159,7 +159,9 @@ class StatusActivity : ComponentActivity() {
         }
         content.addView(
             titleView,
-            band(rowWidth(TITLE_TOP, TITLE_TOP + TITLE_H), TITLE_TOP, TITLE_H),
+            // Ширина ограничена ещё и явным TITLE_W: safeRowWidth на полосе 98…126 даёт 320 px,
+            // и углы бокса выходили на 209.3 (замерено на устройстве). 312 px → угол 206.3.
+            band(minOf(rowWidth(TITLE_TOP, TITLE_TOP + TITLE_H), TITLE_W), TITLE_TOP, TITLE_H),
         )
 
         // Прокручиваемая область 136…362 px. Сама вьюха прозрачная и на всю ширину экрана,
@@ -417,6 +419,7 @@ class StatusActivity : ComponentActivity() {
         /** Полоса заголовка: 96…124 px. */
         const val TITLE_TOP = 98
         const val TITLE_H = 28
+        const val TITLE_W = 312
         const val TITLE_TEXT_PX = 22f
 
         /** Прокручиваемая область: 136…362 px (226 px). */
