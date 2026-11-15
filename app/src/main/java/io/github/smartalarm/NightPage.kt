@@ -386,13 +386,15 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         val cov = n.coveragePct.toInt()
         val covMark = if (cov < 95) " ⚠" else " ✓"
         val line1 = "$start–$end · ${hm(n.durationMin)} · покрытие $cov%$covMark"
-        val hrPart = if (n.hrMin > 0) "пульс ${n.hrMin}–${n.hrMax} ср.${n.hrAvg}" else "пульс н/д"
+        // Пульс рисовать цифрами больше не нужно: он и так на графике. Вместо плашек метрик
+        // (убраны ради высоты графика) цифры эффективности и пробуждений ушли в эту строку.
+        val effPart = "${n.efficiencyPct.toInt()}% эфф · ${n.awakenings} проб"
         val batPart = if (n.batteryStart in 0..100 && n.batteryEnd in 0..100) {
             "бат. ${n.batteryStart}→${n.batteryEnd}%"
         } else {
             "бат. н/д"
         }
-        var line2 = "$hrPart · $batPart"
+        var line2 = "$effPart · $batPart"
         val filePart = " · файл " + file.name.removePrefix("probe_").removeSuffix(".csv")
         // Имя файла — служебное: показываем, только если строка с ним влезает в полосу.
         fitPaint.typeface = Ui.bodyTypeface()
