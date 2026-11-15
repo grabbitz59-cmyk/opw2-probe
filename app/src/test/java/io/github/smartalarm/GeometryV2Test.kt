@@ -54,10 +54,13 @@ class GeometryV2Test {
     @Test
     fun `bezel and lever stay inside safe radius`() {
         assertTrue("внешний радиус обода 208 ≤ 209", 208.0 <= safe)
-        assertTrue("рычаг 206 ≤ 209", 206.0 <= safe)
+        assertTrue("рычаг 186 ≤ 209", 186.0 <= safe)
+        // Рычаг живёт ВНУТРИ обода (внешний радиус 186 < 197, где начинаются риски):
+        // так маркер «сейчас» и дуга отсчёта не прячутся под ним (замерено на устройстве).
+        assertTrue("рычаг не залезает в шкалу", 186.0 < 197.0)
         for (deg in doubleArrayOf(52.0, 90.0, 128.0)) {
             val a = Math.toRadians(deg)
-            for (r in doubleArrayOf(172.0, 206.0)) {
+            for (r in doubleArrayOf(152.0, 186.0)) {
                 val x = cx + r * Math.cos(a)
                 val y = cy + r * Math.sin(a)
                 assertTrue(
@@ -66,6 +69,9 @@ class GeometryV2Test {
                 )
             }
         }
+        // Текст на рычаге идёт по r = (152 + 186) / 2 = 169 и не задевает полосу деталей (330…354).
+        val textTop = cy + 169.0 * Math.cos(Math.toRadians(38.0))
+        assertTrue("верх рычага ниже строки деталей: $textTop > 358", textTop > 358.0)
     }
 
     @Test

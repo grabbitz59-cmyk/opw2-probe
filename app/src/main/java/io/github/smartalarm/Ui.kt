@@ -38,6 +38,8 @@ object Ui {
     const val EMBER_HOT = "#FFD2A0"
     const val EMBER_DIM = "#8A6034"
     const val EMBER_ASH = "#2A2118"
+    /** Заливка неактивного рычага: чуть светлее пепла, иначе форма не видна на фоне (1.25:1). */
+    const val EMBER_ASH_HI = "#2E2417"
     const val ON_EMBER = "#1A1206"
 
     /** Бумага: тёплый белый и два уровня притушённости. */
@@ -60,7 +62,8 @@ object Ui {
     const val SZ_NOW = 36f        // строка «сейчас»
     const val SZ_STATE = 36f      // статус
     const val SZ_LABEL = 32f      // «ПОДЪЁМ», подписи
-    const val SZ_DETAIL = 30f     // «ЧЕРЕЗ 7 Ч 12 М»
+    const val SZ_DETAIL = 26f     // «ЧЕРЕЗ 7 Ч 12 М» (26, а не 30: длинная строка на y 330…354
+                                  // при 30 px уходила за круг — замерено на устройстве 211.9 px)
     const val SZ_TITLE = 28f      // заголовки экранов 2–3
     const val SZ_LEVER = 26f      // текст по дуге рычага
     const val SZ_ROW_LABEL = 26f
@@ -110,6 +113,7 @@ object Ui {
     val emberHot: Int get() = Color.parseColor(EMBER_HOT)
     val emberDim: Int get() = Color.parseColor(EMBER_DIM)
     val emberAsh: Int get() = Color.parseColor(EMBER_ASH)
+    val emberAshHi: Int get() = Color.parseColor(EMBER_ASH_HI)
     val onEmber: Int get() = Color.parseColor(ON_EMBER)
     val paper: Int get() = Color.parseColor(PAPER)
     val paper2: Int get() = Color.parseColor(PAPER_2)

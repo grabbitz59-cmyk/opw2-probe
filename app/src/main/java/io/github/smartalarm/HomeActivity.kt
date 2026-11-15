@@ -216,10 +216,13 @@ class HomeActivity : ComponentActivity() {
         dial.recording = running
         dial.remainingMinutes = if (armed) diffMin else 0
 
-        val windowText = if (Prefs.repeatDays(this) == RepeatDays.NONE) {
+        // 26 px и без слова «ОКНО» при включённом повторе: строка обязана влезать в круг
+        // (при 30 px и полном тексте концы уходили на r = 211.9 — замерено на устройстве).
+        val repeat = Prefs.repeatDays(this)
+        val windowText = if (repeat == RepeatDays.NONE) {
             "ОКНО ±$windowMin МИН"
         } else {
-            "ОКНО ±$windowMin МИН · " + RepeatDays.label(Prefs.repeatDays(this)).uppercase()
+            "±$windowMin МИН · " + RepeatDays.label(repeat).uppercase()
         }
 
         when {

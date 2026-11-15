@@ -48,6 +48,7 @@ class StatusActivity : ComponentActivity() {
     private lateinit var root: FrameLayout
     private lateinit var swipe: SectionSwipe
     private lateinit var indexView: SectionIndexView
+    private lateinit var bezel: BezelView
     private lateinit var titleView: TextView
     private lateinit var versionView: TextView
     private lateinit var windowRow: LedgerRow
@@ -101,6 +102,16 @@ class StatusActivity : ComponentActivity() {
 
     private fun buildUi() {
         root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
+
+        // Обод: та же шкала 72 риски, что на главном, — иначе экраны не читаются как один прибор.
+        bezel = BezelView(this)
+        root.addView(
+            bezel,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
 
         indexView = SectionIndexView(this).apply { active = Sections.PULT }
         // Полоса индикатора берётся из токенов (Ui.INDEX_TOP = 60): на y 42 риски уже в ободе.
@@ -376,6 +387,7 @@ class StatusActivity : ComponentActivity() {
         if (!::root.isInitialized) return
         root.background = ColorDrawable(if (on) Ui.bgAmbient else Ui.bg)
         titleView.setTextColor(if (on) Ui.paper3 else Ui.ember)
+        if (::bezel.isInitialized) bezel.setAmbient(on)
         val visibility = if (on) View.INVISIBLE else View.VISIBLE
         indexView.visibility = visibility
         versionView.visibility = visibility

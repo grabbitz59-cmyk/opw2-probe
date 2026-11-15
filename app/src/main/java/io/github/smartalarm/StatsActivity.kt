@@ -46,6 +46,7 @@ class StatsActivity : ComponentActivity() {
     private lateinit var content: FrameLayout
 
     private lateinit var index: SectionIndexView
+    private lateinit var bezel: BezelView
     private lateinit var titleView: TextView
     private lateinit var metricsView: TextView
     private lateinit var chart: HypnogramView
@@ -124,6 +125,7 @@ class StatsActivity : ComponentActivity() {
         root.setBackgroundColor(bg)
         content.setBackgroundColor(bg)
         titleView.setTextColor(if (on) Ui.paper3 else Ui.ember)
+        if (::bezel.isInitialized) bezel.setAmbient(on)
         val v = if (on) View.INVISIBLE else View.VISIBLE
         index.visibility = v
         metricsView.visibility = v
@@ -142,6 +144,16 @@ class StatsActivity : ComponentActivity() {
         content = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
         root.addView(
             content,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            ),
+        )
+
+        // Обод: та же шкала 72 риски, что на главном, — иначе экраны не читаются как один прибор.
+        bezel = BezelView(this)
+        content.addView(
+            bezel,
             FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,

@@ -114,8 +114,8 @@ class NightDialView @JvmOverloads constructor(
 
     // ------------------------------------------------------------------ краски
 
-    private val tickMinor = Ui.strokePaint(Ui.bezelMinor, TICK_MINOR_W)
-    private val tickMajor = Ui.strokePaint(Ui.bezelMajor, TICK_MAJOR_W)
+    private val tickMinor = Ui.strokePaint(Ui.bezelMinor, 2f)
+    private val tickMajor = Ui.strokePaint(Ui.bezelMajor, 2f)
     private val ringPaint = Ui.strokePaint(Ui.paper3, 1f)
     private val nowMarker = Ui.strokePaint(Ui.paper2, 3f)
     private val arcPaint = Ui.strokePaint(Ui.ember, ARC_W).apply { strokeCap = Paint.Cap.ROUND }
@@ -253,26 +253,12 @@ class NightDialView @JvmOverloads constructor(
         drawTexts(canvas, cx, cy, k)
     }
 
-    /** 72 риски через 5° (10 минут на деление): minor r 197…203, major (час) r 197…208. */
+    /** Обод: те же 72 риски, что на экранах 2–3 (общий код — [Bezel.drawTicks]). */
     private fun drawBezel(canvas: Canvas, cx: Float, cy: Float, k: Float) {
-        val rIn = TICK_R_IN * k
-        val rMinOut = TICK_R_MINOR_OUT * k
-        val rMajOut = Ui.BEZEL_OUT * k
-        val alpha = if (dimmed) AMB_TICK_ALPHA else 255
+        val alpha = if (dimmed) Bezel.AMB_TICK_ALPHA else 255
         tickMinor.alpha = alpha
         tickMajor.alpha = alpha
-        for (i in 0 until TICKS) {
-            val a = Math.toRadians((i * TICK_STEP_DEG - 90f).toDouble())
-            val ca = cos(a).toFloat()
-            val sa = sin(a).toFloat()
-            val major = i % TICKS_PER_HOUR == 0
-            val outer = if (major) rMajOut else rMinOut
-            canvas.drawLine(
-                cx + rIn * ca, cy + rIn * sa,
-                cx + outer * ca, cy + outer * sa,
-                if (major) tickMajor else tickMinor,
-            )
-        }
+        Bezel.drawTicks(canvas, cx, cy, k, tickMinor, tickMajor)
         if (dimmed) {
             // R9: в AOD на экране должно остаться «тонкое кольцо». Риски при 30 % яркости дают
             // на чёрном около (10,11,12) — это невидимо, поэтому кольцо рисуется отдельно,
@@ -337,13 +323,15 @@ class NightDialView @JvmOverloads constructor(
         val base = when {
             stop -> Ui.signalStop
             armed -> Ui.ember
-            else -> Ui.emberAsh
+            // Неактивный рычаг: пепел на 1.25:1 к фону не читался как форма (замер на устройстве),
+            // поэтому заливка чуть светлее и кромка толще — рычаг видно, но акцентом он не стал.
+            else -> Ui.emberAshHi
         }
         leverFill.color = if (leverPressed) lighten(base, if (stop || armed) 0.9f else 1.2f) else base
         canvas.drawPath(leverPath, leverFill)
         if (!armed && !stop) {
-            // Неактивный рычаг: тонкая янтарная кромка — инструмент, а не провал.
-            leverEdge.color = if (leverPressed) Ui.ember else Ui.emberDim
+            leverEdge.strokeWidth = 2f * k
+            leverEdge.color = Ui.alpha(Ui.ember, if (leverPressed) 255 else 200)
             canvas.drawPath(leverPath, leverEdge)
         }
 
@@ -465,14 +453,7 @@ class NightDialView @JvmOverloads constructor(
         const val CX = 233f
         const val CY = 233f
 
-        // --- обод: 72 риски через 5° = 10 минут на деление ---
-        const val TICKS = 72
-        const val TICKS_PER_HOUR = 6
-        const val TICK_STEP_DEG = 5f
-        const val TICK_R_IN = 197f
-        const val TICK_R_MINOR_OUT = 203f
-        const val TICK_MINOR_W = 2f
-        const val TICK_MAJOR_W = 2f
+        // --- обод: геометрия рисок живёт в Bezel (общий код для всех трёх экранов) ---
 
         // --- маркер «сейчас» ---
         const val NOW_R_IN = 195f
@@ -485,9 +466,9 @@ class NightDialView @JvmOverloads constructor(
         const val DOT_R_MAX = 13f
         const val BREATH_MS = 1400L
 
-        // --- рычаг: annulus-сектор внизу ---
-        const val LEVER_R_OUT = 206f
-        const val LEVER_R_IN = 172f
+        // --- рычаг: annulus-сектор внизу, внутри обода (обод и дуга отсчёта остаются чистыми) ---
+        const val LEVER_R_OUT = 186f
+        const val LEVER_R_IN = 152f
         const val LEVER_START = 52f
         const val LEVER_SWEEP = 76f
         const val LEVER_HIT_R_IN = 110f
