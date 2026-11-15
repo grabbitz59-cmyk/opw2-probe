@@ -105,7 +105,14 @@ class HomeActivity : ComponentActivity() {
         statusView.visibility = if (on) View.INVISIBLE else View.VISIBLE
         windowPill.visibility = if (on) View.INVISIBLE else View.VISIBLE
         cta.visibility = if (on) View.INVISIBLE else View.VISIBLE
-        rootFrame.setBackgroundColor(if (on) android.graphics.Color.BLACK else Ui.bg)
+        rootFrame.background = if (on) {
+            android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#0A0A0A"))
+        } else {
+            android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(android.graphics.Color.parseColor(Ui.BG_TOP), android.graphics.Color.parseColor(Ui.BG_BOTTOM)),
+            )
+        }
         if (!on) dial.animateRing()
     }
 
@@ -129,7 +136,12 @@ class HomeActivity : ComponentActivity() {
     // ---------- UI ----------
 
     private fun buildUi() {
-        val root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
+        val root = FrameLayout(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor(Ui.BG_TOP), Color.parseColor(Ui.BG_BOTTOM)),
+            )
+        }
         rootFrame = root
 
         dial = DialView(this).apply {
@@ -145,21 +157,23 @@ class HomeActivity : ComponentActivity() {
         ))
 
         statusView = TextView(this).apply {
-            textSize = 13f
+            textSize = 11f
             typeface = Ui.labelTypeface()
+            letterSpacing = 0.12f
             setTextColor(Ui.textSecondary)
             gravity = Gravity.CENTER
             setSingleLine(true)
         }
-        root.addView(statusView, overlay(topPx = 206, heightPx = 34))
+        root.addView(statusView, overlay(topPx = 200, heightPx = 32))
 
         windowPill = TextView(this).apply {
             text = "окно ±$windowMin мин"
-            textSize = 13f
+            textSize = 11f
             typeface = Ui.labelTypeface()
+            letterSpacing = 0.04f
             gravity = Gravity.CENTER
             setTextColor(Ui.textSecondary)
-            setBackgroundResource(R.drawable.bg_pill_off)
+            background = pillBackground()
             setOnClickListener {
                 windowMin = when (windowMin) { 15 -> 30; 30 -> 45; 45 -> 60; else -> 15 }
                 Prefs.setWindowMin(this@HomeActivity, windowMin)
@@ -175,21 +189,21 @@ class HomeActivity : ComponentActivity() {
                 true
             }
         }
-        root.addView(windowPill, overlay(topPx = 250, heightPx = 56))
+        root.addView(windowPill, overlay(topPx = 244, heightPx = 60))
 
         cta = TextView(this).apply {
             textSize = 15f
             typeface = Ui.labelTypeface()
-            letterSpacing = 0.05f
+            letterSpacing = 0.06f
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#04211D"))
-            setBackgroundResource(R.drawable.bg_cta)
+            setTextColor(Ui.onAccent)
+            background = ctaBackground(false)
             setOnClickListener {
                 performHapticFeedback(HapticFeedbackConstants.CONFIRM)
                 onPrimary()
             }
         }
-        root.addView(cta, overlay(topPx = 314, heightPx = 88))
+        root.addView(cta, overlay(topPx = 314, heightPx = 96))
 
         // Индикатор разделов: 1/3 — мы на «Будильнике»
         val dots = PageDotsView(this).apply { setPage(0, 3) }
@@ -257,9 +271,9 @@ class HomeActivity : ComponentActivity() {
             lp.width = minOf(maxW, if (safe > 0f) safe else maxW).toInt()
             view.layoutParams = lp
         }
-        cap(statusView, 420f)
-        cap(windowPill, 340f)
-        cap(cta, 240f)
+        cap(statusView, 412f)
+        cap(windowPill, 392f)
+        cap(cta, 256f)
     }
 
 
@@ -336,30 +350,53 @@ class HomeActivity : ComponentActivity() {
         statusView.setTextColor(if (missing.isEmpty()) Ui.textSecondary else Ui.danger)
         statusView.text = when {
             missing.isNotEmpty() ->
-                "нет прав: " + missing.joinToString(", ") { it.substringAfterLast('.') }
-            running -> "идёт запись · ${diffMin / 60}ч ${diffMin % 60}м · ${batteryPct()}%"
-            armed -> "${if (tomorrow) "завтра" else "сегодня"} · ${diffMin / 60}ч ${diffMin % 60}м"
-            else -> "не взведён · ${batteryPct()}%"
+                "НЕТ ПРАВ: " + missing.joinToString(" · ") { it.substringAfterLast('.') }
+            running -> "ЗАПИСЬ · ${diffMin / 60}Ч ${diffMin % 60}М · ${batteryPct()}%"
+            armed -> "${if (tomorrow) "ЗАВТРА" else "СЕГОДНЯ"} · ${diffMin / 60}Ч ${diffMin % 60}М"
+            else -> "НЕ ВЗВЕДЁН · ${batteryPct()}%"
         }
 
         val repeat = Prefs.repeatDays(this)
-        windowPill.text = if (repeat == RepeatDays.NONE) "окно ±$windowMin мин"
-        else "окно ±$windowMin · ${RepeatDays.label(repeat)}"
+        windowPill.text = if (repeat == RepeatDays.NONE) "окно ±$windowMin"
+        else "±$windowMin · ${RepeatDays.label(repeat)}"
 
-        if (armed && running) {
-            cta.text = "ОСТАНОВИТЬ"
-            cta.setBackgroundResource(R.drawable.bg_cta_stop)
-            cta.setTextColor(Ui.text)
-        } else if (armed) {
-            cta.text = "ЗАПУСТИТЬ ЗАПИСЬ"
-            cta.setBackgroundResource(R.drawable.bg_cta)
-            cta.setTextColor(Color.parseColor("#04211D"))
-        } else {
-            cta.text = "СПАТЬ"
-            cta.setBackgroundResource(R.drawable.bg_cta)
-            cta.setTextColor(Color.parseColor("#04211D"))
+        when {
+            armed && running -> {
+                cta.text = "ОСТАНОВИТЬ"
+                cta.background = ctaBackground(danger = true)
+                cta.setTextColor(Ui.text)
+            }
+            armed -> {
+                cta.text = "НАЧАТЬ ЗАПИСЬ"
+                cta.background = ctaBackground(danger = false)
+                cta.setTextColor(Ui.onAccent)
+            }
+            else -> {
+                cta.text = "СПАТЬ"
+                cta.background = ctaBackground(danger = false)
+                cta.setTextColor(Ui.onAccent)
+            }
         }
     }
+
+    /** Капсула: тёмная поверхность с тонкой обводкой. */
+    private fun pillBackground(): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = 30f
+            setColor(Color.parseColor(Ui.SURFACE_HI))
+            setStroke(2, Color.parseColor(Ui.STROKE_HI))
+        }
+
+    /** Главная кнопка: градиент акцента (или красный для «остановить»). */
+    private fun ctaBackground(danger: Boolean): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+            if (danger) {
+                intArrayOf(Color.parseColor("#FF7A7A"), Color.parseColor(Ui.DANGER_DIM))
+            } else {
+                intArrayOf(Color.parseColor(Ui.ACCENT_FROM), Color.parseColor(Ui.ACCENT_TO))
+            },
+        ).apply { cornerRadius = 48f }
 
     private fun currentTarget(): Long {
         val stored = Prefs.alarmAt(this)

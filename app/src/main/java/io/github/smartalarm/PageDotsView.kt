@@ -7,10 +7,10 @@ import android.util.AttributeSet
 import android.view.View
 
 /**
- * Индикатор разделов: три точки, текущая — акцентом, остальные приглушены.
+ * Индикатор разделов: три точки в нижней полосе круга.
  *
- * Стоит в нижней полосе круга (там как раз есть место под узкую строку),
- * поэтому размеры маленькие и позиция считается от центра.
+ * Активная — акцентом и крупнее, остальные — приглушённые. Плавно перетекает
+ * (анимация радиуса/альфы), чтобы соответствовать «карусельному» листанию.
  */
 class PageDotsView @JvmOverloads constructor(
     context: Context,
@@ -20,27 +20,49 @@ class PageDotsView @JvmOverloads constructor(
 
     private var current = 0
     private var total = 3
+    private var phase = 0f
 
     private val active = Paint().apply { isAntiAlias = true; color = Ui.accent }
-    private val idle = Paint().apply { isAntiAlias = true; color = android.graphics.Color.parseColor("#33474B") }
+    private val idle = Paint().apply { isAntiAlias = true; color = Ui.phaseNone }
+
+    private val animator = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = 220L
+        addUpdateListener {
+            phase = it.animatedValue as Float
+            invalidate()
+        }
+    }
 
     fun setPage(index: Int, pages: Int = 3) {
+        if (index == current && pages == total) return
         current = index
         total = pages
-        invalidate()
+        animator.cancel()
+        animator.start()
     }
 
     private fun dp(v: Float): Float = v * resources.displayMetrics.density
 
     override fun onDraw(canvas: Canvas) {
         val cy = height / 2f
-        val r = dp(3.5f)
-        val gap = dp(8f)
+        val gap = dp(9f)
+        val baseR = dp(2.6f)
         val span = (total - 1) * gap
         var x = (width - span) / 2f
         for (i in 0 until total) {
-            canvas.drawCircle(x, cy, if (i == current) r * 1.15f else r * 0.85f, if (i == current) active else idle)
+            val isActive = i == current
+            val radius = if (isActive) baseR * (1.35f + 0.15f * phase) else baseR
+            val paint = if (isActive) active else idle
+            paint.alpha = if (isActive) 255 else 120
+            canvas.drawCircle(x, cy, radius, paint)
             x += gap
+        }
+        // мягкая подсветка вокруг активной точки на время анимации
+        if (phase > 0.01f) {
+            val cx = (width - span) / 2f + current * gap
+            active.alpha = (70 * (1f - phase)).toInt().coerceIn(0, 70)
+            canvas.drawCircle(cx, cy, baseR * 3.2f, active)
+            active.alpha = 255
         }
     }
 }
