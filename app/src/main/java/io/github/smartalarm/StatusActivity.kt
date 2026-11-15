@@ -115,7 +115,7 @@ class StatusActivity : ComponentActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(Ui.bg)
+            background = verticalGradient()
             setPadding(dp(2), dp(2), dp(2), dp(2))
         }
 
@@ -166,7 +166,7 @@ class StatusActivity : ComponentActivity() {
         addInfo(root, "Версия", appVersion())
 
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(Ui.bg)
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
             isFillViewport = true
             addView(root)
         }
@@ -174,14 +174,14 @@ class StatusActivity : ComponentActivity() {
         val inset = RoundScreen.inscribedInsetPx() + dp(16)
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Ui.bg)
+            background = verticalGradient()
             setPadding(inset, dp(34), inset, dp(24))
             addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
         contentView = outer
         // Индикатор разделов: 3/3 — мы на «Статусе»
         val frame = android.widget.FrameLayout(this).apply {
-            setBackgroundColor(Ui.bg)
+            background = verticalGradient()
             addView(outer)
             addView(
                 PageDotsView(this@StatusActivity).apply { setPage(2, 3) },
@@ -201,14 +201,55 @@ class StatusActivity : ComponentActivity() {
         java.time.Instant.ofEpochMilli(triggerAt)
             .atZone(java.time.ZoneId.systemDefault())
             .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm", java.util.Locale.US))
-    private fun addInfo(parent: LinearLayout, key: String, value: String) {        parent.addView(
-            row(value, 11f, Ui.TEXT_SECONDARY).apply {
+    /**
+     * Строка-карточка: акцентная точка, подпись слева, значение справа.
+     * Высота 28 dp, скругление 12 dp — по docs/design-brief.md.
+     */
+    private fun addInfo(parent: LinearLayout, key: String, value: String) {
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(8), 0, dp(10), 0)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(Ui.surface)
+                setStroke(2, Ui.stroke)
+            }
+        }
+        card.addView(android.view.View(this).apply {
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL
+                setColor(Ui.accent)
+            }
+            layoutParams = LinearLayout.LayoutParams(dp(6), dp(6)).apply { rightMargin = dp(8) }
+        })
+        card.addView(
+            row(key, 10f, Ui.TEXT_SECONDARY).apply {
                 gravity = Gravity.START
-                setPadding(dp(2), dp(5), dp(2), 0)
-                text = "$key: $value"
+                typeface = Ui.bodyTypeface()
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
+        card.addView(
+            row(value, 10f, Ui.TEXT).apply {
+                gravity = Gravity.END
+                typeface = Ui.labelTypeface()
+            },
+        )
+        parent.addView(
+            card,
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(28)).apply {
+                topMargin = dp(4)
             },
         )
     }
+
+    /** Фон экрана: глубокий вертикальный градиент из токенов. */
+    private fun verticalGradient(): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(android.graphics.Color.parseColor(Ui.BG_TOP), android.graphics.Color.parseColor(Ui.BG_BOTTOM)),
+        )
 
     private fun has(permission: String): Boolean =
         checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
