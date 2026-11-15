@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import java.io.File
 import java.time.Instant
@@ -112,7 +113,21 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
     init {
         // Построение вьюх — один раз на старте приложения (не на свайпе), поэтому тяжёлую часть
         // держим здесь; чтение CSV — только в [onShown].
-        root = buildUi()
+        // Страница целиком — ScrollView: графики занимают верх, детали ночи открываются
+        // вертикальной прокруткой (высота содержимого CONTENT_H > высоты экрана).
+        val page = buildUi()
+        root = ScrollView(host).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(
+                page,
+                FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    CONTENT_H,
+                ),
+            )
+        }
     }
 
     /** Страница стала текущей — перечитать ночь. */
@@ -153,7 +168,8 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
 
         // 5. Сводка: две строки 18 px, y 272…318.
         summaryView = block()
-        // Сводка не добавляется: два графика занимают экран, а её цифры ушли в подписи карточек.
+        // Детали ночи: открываются вертикальной прокруткой (страница — ScrollView).
+        page.addView(summaryView, FrameLayout.LayoutParams(300, 120).apply { gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL; topMargin = BAND_SUMMARY_TOP })
 
         // 6. Подсказка полноэкранного режима — видна только когда график развёрнут.
         hintView = label("ТАП — СВЕРНУТЬ", SZ_HINT, Ui.textTertiary, LS_HINT)
@@ -517,7 +533,10 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         const val BAND_LEGEND_BOTTOM = 378
         const val BAND_WAKE_TOP = 382
         const val BAND_WAKE_BOTTOM = 400
-        const val BAND_SUMMARY_TOP = 352
+        const val BAND_SUMMARY_TOP = 404
+
+        /** Высота прокручиваемого содержимого: графики, легенда, фаза и детали ночи. */
+        const val CONTENT_H = 540
         const val BAND_SUMMARY_BOTTOM = 390
         const val BAND_CHIPS_TOP = 322
         const val BAND_CHIPS_BOTTOM = 400
