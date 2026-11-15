@@ -78,7 +78,7 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
     override val section: Int get() = Sections.NIGHT
 
     private lateinit var titleView: TextView
-    private lateinit var chart: SleepChartView
+    private lateinit var chart: NightChartsView
     private lateinit var legendRow: LinearLayout
     private lateinit var wakeView: TextView
     private lateinit var summaryView: TextView
@@ -139,7 +139,7 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         fitOneLine(titleView, MIN_TITLE)
 
         // 2. Карточка графика: y 122…214, единственный широкий блок (в средней полосе).
-        chart = SleepChartView(host)
+        chart = NightChartsView(host)
         page.addView(chart, band(BAND_CHART_TOP, BAND_CHART_BOTTOM, W_CHART))
 
         // 3. Легенда фаз: ● глубокий ● лёгкий ● бодрств.
@@ -153,7 +153,7 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
 
         // 5. Сводка: две строки 18 px, y 272…318.
         summaryView = block()
-        page.addView(summaryView, band(BAND_SUMMARY_TOP, BAND_SUMMARY_BOTTOM, W_SUMMARY))
+        // Сводка не добавляется: два графика занимают экран, а её цифры ушли в подписи карточек.
 
         // 6. Подсказка полноэкранного режима — видна только когда график развёрнут.
         hintView = label("ТАП — СВЕРНУТЬ", SZ_HINT, Ui.textTertiary, LS_HINT)
@@ -512,11 +512,11 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         const val BAND_TITLE_TOP = 90
         const val BAND_TITLE_BOTTOM = 118
         const val BAND_CHART_TOP = 122
-        const val BAND_CHART_BOTTOM = 290
-        const val BAND_LEGEND_TOP = 294
-        const val BAND_LEGEND_BOTTOM = 318
-        const val BAND_WAKE_TOP = 322
-        const val BAND_WAKE_BOTTOM = 346
+        const val BAND_CHART_BOTTOM = 352
+        const val BAND_LEGEND_TOP = 358
+        const val BAND_LEGEND_BOTTOM = 378
+        const val BAND_WAKE_TOP = 382
+        const val BAND_WAKE_BOTTOM = 400
         const val BAND_SUMMARY_TOP = 352
         const val BAND_SUMMARY_BOTTOM = 390
         const val BAND_CHIPS_TOP = 322
@@ -528,7 +528,7 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         const val W_TITLE = 260f
         const val W_CHART = 340f
         const val W_LEGEND = 300f
-        const val W_WAKE = 312f
+        const val W_WAKE = 240f
         const val W_SUMMARY = 268f
         const val W_CHIPS = 242f
 
