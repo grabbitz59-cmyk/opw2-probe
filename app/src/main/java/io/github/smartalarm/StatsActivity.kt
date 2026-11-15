@@ -220,20 +220,11 @@ class StatsActivity : ComponentActivity() {
         )
 
         contentView = outer
-        // Индикатор разделов + контент: 2/3 — мы на «Ночи»
+        // Индикатор разделов убран: в нижней полосе он перекрывал текст сводки
+        // (лимит круга там ~150 px), листание остаётся свайпом влево.
         val frame = android.widget.FrameLayout(this).apply {
             background = verticalGradient()
             addView(outer)
-            addView(
-                PageDotsView(this@StatsActivity).apply { setPage(1, 3) },
-                android.widget.FrameLayout.LayoutParams(
-                    (60 * resources.displayMetrics.density).toInt(),
-                    (10 * resources.displayMetrics.density).toInt(),
-                ).apply {
-                    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                    bottomMargin = (20 * resources.displayMetrics.density).toInt()
-                },
-            )
         }
         setContentView(frame)
     }

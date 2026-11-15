@@ -16,8 +16,8 @@ android {
         applicationId = "io.github.smartalarm"
         minSdk = 30
         targetSdk = 34
-        versionCode = 78
-        versionName = "1.68-ui"
+        versionCode = 79
+        versionName = "1.69-ui"
     }
 
     signingConfigs {

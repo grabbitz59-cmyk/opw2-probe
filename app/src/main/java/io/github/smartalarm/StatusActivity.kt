@@ -179,20 +179,10 @@ class StatusActivity : ComponentActivity() {
             addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
         contentView = outer
-        // Индикатор разделов: 3/3 — мы на «Статусе»
+        // Индикатор разделов убран: перекрывал последнюю строку-карточку.
         val frame = android.widget.FrameLayout(this).apply {
             background = verticalGradient()
             addView(outer)
-            addView(
-                PageDotsView(this@StatusActivity).apply { setPage(2, 3) },
-                android.widget.FrameLayout.LayoutParams(
-                    (60 * resources.displayMetrics.density).toInt(),
-                    (10 * resources.displayMetrics.density).toInt(),
-                ).apply {
-                    gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                    bottomMargin = (20 * resources.displayMetrics.density).toInt()
-                },
-            )
         }
         setContentView(frame)
     }
