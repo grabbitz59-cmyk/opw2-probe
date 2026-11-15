@@ -134,49 +134,63 @@ class StatsActivity : ComponentActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(Ui.bg)
+            background = verticalGradient()
             setPadding(dp(2), dp(2), dp(2), dp(2))
         }
 
         root.addView(text("ПРОШЛАЯ НОЧЬ", 11f, Ui.ACCENT).apply { letterSpacing = 0.16f })
 
-        chart = SleepChartView(this).apply { setBackgroundResource(R.drawable.bg_card) }
+        chart = SleepChartView(this)
         root.addView(
             chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(96))
-                .apply { topMargin = dp(4) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(104))
+                .apply { topMargin = dp(6) },
         )
 
-        summaryView = text("загружаю…", 11f, Ui.TEXT_SECONDARY).apply {
-            gravity = Gravity.START
-            setPadding(dp(2), dp(6), dp(2), 0)
-            setLineSpacing(dp(2).toFloat(), 1f)
-        }
-        root.addView(summaryView, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
+        // Легенда фаз: цветные точки + подписи
+        root.addView(
+            legendRow(),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(8) },
+        )
 
-        phasesView = text("", 11f, Ui.ACCENT).apply {
+        // Две «плашки» с главными числами
+        root.addView(
+            metricsRow(),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64))
+                .apply { topMargin = dp(8) },
+        )
+
+        phasesView = text("", 10f, Ui.ACCENT).apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(6), dp(2), 0)
+            setPadding(dp(4), dp(8), dp(4), 0)
             setLineSpacing(dp(2).toFloat(), 1f)
         }
         root.addView(phasesView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        efficiencyView = text("", 11f, Ui.TEXT_SECONDARY).apply {
+        summaryView = text("загружаю…", 10f, Ui.TEXT_SECONDARY).apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(4), dp(2), 0)
+            setPadding(dp(4), dp(6), dp(4), 0)
+            setLineSpacing(dp(2).toFloat(), 1f)
+        }
+        root.addView(summaryView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+
+        efficiencyView = text("", 10f, Ui.TEXT_SECONDARY).apply {
+            gravity = Gravity.START
+            setPadding(dp(4), dp(4), dp(4), 0)
             setLineSpacing(dp(2).toFloat(), 1f)
         }
         root.addView(efficiencyView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ))
 
-        fileView = text("", 9f, Ui.TEXT_TERTIARY).apply {
+        fileView = text("", 8f, Ui.TEXT_TERTIARY).apply {
             gravity = Gravity.START
-            setPadding(dp(2), dp(6), dp(2), dp(4))
+            setPadding(dp(4), dp(8), dp(4), dp(6))
         }
         root.addView(fileView, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -184,15 +198,15 @@ class StatsActivity : ComponentActivity() {
 
         // Контент вписан в квадрат нашей модели (R1–R2) и прокручивается вниз:
         // шрифт крупный, поэтому всё в один экран не влезает — это осознанно.
-        val inset = RoundScreen.inscribedInsetPx() + dp(16)
+        val inset = RoundScreen.inscribedInsetPx() + dp(12)
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Ui.bg)
+            background = verticalGradient()
             setPadding(inset, dp(34), inset, dp(24))
         }
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
-            setBackgroundColor(Ui.bg)
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
             isVerticalScrollBarEnabled = true
             addView(root)
         }
@@ -204,7 +218,7 @@ class StatsActivity : ComponentActivity() {
         contentView = outer
         // Индикатор разделов + контент: 2/3 — мы на «Ночи»
         val frame = android.widget.FrameLayout(this).apply {
-            setBackgroundColor(Ui.bg)
+            background = verticalGradient()
             addView(outer)
             addView(
                 PageDotsView(this@StatsActivity).apply { setPage(1, 3) },
@@ -219,6 +233,71 @@ class StatsActivity : ComponentActivity() {
         }
         setContentView(frame)
     }
+
+    /** Фон экрана: глубокий вертикальный градиент из токенов. */
+    private fun verticalGradient(): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(android.graphics.Color.parseColor(Ui.BG_TOP), android.graphics.Color.parseColor(Ui.BG_BOTTOM)),
+        )
+
+    /** Легенда: ● глубокий ● лёгкий ● бодрствование. */
+    private fun legendRow(): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        data class Item(val color: Int, val label: String)
+        listOf(
+            Item(Ui.phaseDeep, "глубокий"),
+            Item(Ui.phaseLight, "лёгкий"),
+            Item(Ui.phaseAwake, "бодрств."),
+        ).forEach { item ->
+            val cell = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(4), 0, dp(4), 0)
+            }
+            cell.addView(android.view.View(this).apply {
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    shape = android.graphics.drawable.GradientDrawable.OVAL
+                    setColor(item.color)
+                }
+                layoutParams = LinearLayout.LayoutParams(dp(8), dp(8)).apply { rightMargin = dp(4) }
+            })
+            cell.addView(text(item.label, 8f, Ui.TEXT_SECONDARY).apply { gravity = Gravity.CENTER_VERTICAL })
+            row.addView(cell)
+        }
+        return row
+    }
+
+    /** Две плашки: эффективность и пробуждения — крупными числами. */
+    private fun metricsRow(): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        metricValue = text("—", 22f, Ui.TEXT).apply { typeface = Ui.clockTypeface() }
+        metricLabel = text("эффективность", 8f, Ui.TEXT_SECONDARY)
+        metricValue2 = text("—", 22f, Ui.TEXT).apply { typeface = Ui.clockTypeface() }
+        metricLabel2 = text("пробуждений", 8f, Ui.TEXT_SECONDARY)
+        row.addView(chip(metricValue, metricLabel), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { rightMargin = dp(4) })
+        row.addView(chip(metricValue2, metricLabel2), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { leftMargin = dp(4) })
+        return row
+    }
+
+    private fun chip(value: TextView, label: TextView): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(Ui.surface)
+                setStroke(2, Ui.stroke)
+            }
+            addView(value)
+            addView(label)
+        }
 
     private fun load() {
         Thread {
@@ -267,6 +346,8 @@ class StatsActivity : ComponentActivity() {
         summaryView.text = sb.toString().trim()
 
         // Фаза, в которой разбудил будильник (по HR + движению в этот момент)
+        metricValue.text = "${n.efficiencyPct.toInt()}%"
+        metricValue2.text = "${n.awakenings}"
         phasesView.text = buildString {
             if (n.wakePhase != SleepStats.Stage.UNKNOWN) {
                 append("Разбудил в фазе: ").append(PhaseEstimator.label(n.wakePhase))
