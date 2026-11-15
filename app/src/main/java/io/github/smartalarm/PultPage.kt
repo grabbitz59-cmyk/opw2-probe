@@ -8,32 +8,37 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.StateListDrawable
 import android.os.BatteryManager
-import android.os.Bundle
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.activity.ComponentActivity
 import java.util.Locale
 import kotlin.math.abs
 
 /**
- * Третий раздел карусели — «Статус»: сводка о том, что настроено и что доступно.
+ * Третья страница карусели — «Статус»: сводка о том, что настроено и что доступно.
  *
- * Визуальный язык — v1: градиентный фон [Ui.BG_TOP]→[Ui.BG_BOTTOM], карточки-плашки
- * ([Ui.SURFACE], скругление 12 dp, обводка 2 px [Ui.STROKE]), точка-индикатор акцентом
- * и три точки разделов внизу. Геометрия — исправленная (v2-фиксы, без v2-визуала):
+ * Раньше это был отдельный `StatusActivity` (третий раздел); теперь — страница внутри одного
+ * окна [SectionsActivity], поэтому свайп двигает вьюхи, а не создаёт Activity (создание окна
+ * блокировало поток анимации на 183–551 мс). Вся вёрстка и координаты перенесены из
+ * `StatusActivity` без изменений — меняется только обвязка (нет `onCreate`/`onResume`/
+ * `dispatchTouchEvent`/`SectionSwipe`/`finish()`); перечитывание данных по-прежнему происходит
+ * при каждом показе страницы, через [onShown].
  *
- *  - только средняя полоса круга: заголовок 96…124 px, прокручиваемая область 136…362 px,
- *    индикатор разделов 408…428 px (центр точек 418). Все ряды шириной
- *    `min(360, RoundScreen.safeRowWidth(..))`, посчитанной по видимой части строки, поэтому
- *    углы карточек не выходят за безопасный радиус 209 px ни при каком скролле;
+ * Визуальный язык — v1: карточки-плашки ([Ui.SURFACE], скругление 12 dp, обводка 2 px
+ * [Ui.STROKE]), точка-индикатор акцентом и три точки разделов внизу. Геометрия — исправленная
+ * (v2-фиксы, без v2-визуала):
+ *
+ *  - только средняя полоса круга: заголовок 98…126 px, прокручиваемая область 136…362 px.
+ *    Все ряды шириной `min(360, RoundScreen.safeRowWidth(..))`, посчитанной по видимой части
+ *    строки, поэтому углы карточек не выходят за безопасный радиус 209 px ни при каком скролле;
+ *    полоса индикатора разделов (414…434 px) остаётся свободной: сам индикатор теперь один на
+ *    всё приложение и рисуется хостом поверх страниц (в v1 он был свой в каждой Activity);
  *  - строка = 72 px (36 dp) — тап-зона всей строки проходит требование R3 (≥ 36 dp);
  *  - первые три строки видны без прокрутки, последняя строка после прокрутки заканчивается
  *    на y = 360 px, то есть не упирается в нижнюю дугу круга.
@@ -41,55 +46,38 @@ import kotlin.math.abs
  * Кегли — как в v1 (20 px подпись/значение, 22 px заголовок), но не мельче 18 px.
  * Единицы ниже — пиксели устройства (OPW2: 466×466, 320 dpi, 1 dp = 2 px): так они совпадают
  * с токенами [Ui] и [RoundScreen], которые тоже заданы в px.
+ *
+ * Фон страницы **прозрачный**: вертикальный градиент рисует хост под всеми страницами, иначе
+ * при свайпе между страницами были бы видны швы.
  */
-class StatusActivity : ComponentActivity() {
+class PultPage(host: SectionsActivity) : SectionPage(host) {
 
-    private lateinit var root: FrameLayout
-    private lateinit var content: FrameLayout
-    private lateinit var titleView: TextView
-    private lateinit var scroll: ScrollView
-    private lateinit var column: LinearLayout
-    private lateinit var dots: PageDotsView
-    private lateinit var swipe: SectionSwipe
+    override val root: View
+
+    /** Раздел «Статус» — третий в карусели. */
+    override val section: Int get() = Sections.PULT
+
+    private val scroll: ScrollView
+    private val column: LinearLayout
 
     /** Карточки-строки в порядке добавления: по индексу считается их y на экране. */
     private val cards = ArrayList<View>()
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        buildUi()
-        swipe = SectionSwipe(this, Sections.PULT, content)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (::swipe.isInitialized) swipe.reset()
-        // Статус — «живой» экран: при возврате перечитываем настройки, батарею и права.
-        if (::column.isInitialized) refreshRows()
-    }
-
-    // ---------- навигация по кругу ----------
-
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (::swipe.isInitialized) swipe.handle(ev)
-        return super.dispatchTouchEvent(ev)
-    }
-
-    // ---------- вёрстка ----------
-
-    private fun buildUi() {
-        root = FrameLayout(this).apply { background = screenBackground() }
-        content = FrameLayout(this)
-        root.addView(
-            content,
-            FrameLayout.LayoutParams(
+    init {
+        val frame = FrameLayout(host).apply {
+            // Страница занимает всё окно: хост двигает её целиком при свайпе.
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
-            ),
-        )
+            )
+            // Градиент — на хосте (он общий для трёх страниц). Свой фон не рисуем: при свайпе
+            // непрозрачная плашка страницы дала бы видимый шов и лишний слой отрисовки.
+            setBackgroundColor(Color.TRANSPARENT)
+        }
+        root = frame
 
-        // Заголовок: 96…124 px — в полосе, где ширина круга ещё ~316 px.
-        titleView = TextView(this).apply {
+        // Заголовок: 98…126 px — в полосе, где ширина круга ещё ~316 px.
+        val titleView = TextView(host).apply {
             text = "СТАТУС"
             setTextSize(TypedValue.COMPLEX_UNIT_PX, TITLE_TEXT_PX)
             typeface = Ui.labelTypeface()
@@ -99,7 +87,7 @@ class StatusActivity : ComponentActivity() {
             isSingleLine = true
             includeFontPadding = false
         }
-        content.addView(
+        frame.addView(
             titleView,
             // Ширина ограничена ещё и явным TITLE_W: safeRowWidth на полосе 98…126 даёт 320 px,
             // и углы бокса выходили на 209.3 (замерено на устройстве). 312 px → угол 206.3.
@@ -110,12 +98,12 @@ class StatusActivity : ComponentActivity() {
         // но каждой строке ширина считается по её видимой части (см. updateRowWidths),
         // а минимально возможная ширина в этой полосе — 328 px, поэтому видимые пиксели
         // карточек всегда внутри безопасного радиуса.
-        column = LinearLayout(this).apply {
+        column = LinearLayout(host).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, 0, 0, 0)
         }
-        scroll = ScrollView(this).apply {
+        scroll = ScrollView(host).apply {
             isVerticalScrollBarEnabled = false
             isFillViewport = false
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -132,17 +120,23 @@ class StatusActivity : ComponentActivity() {
             )
             setOnScrollChangeListener { _, _, _, _, _ -> updateRowWidths() }
         }
-        content.addView(scroll, band(ViewGroup.LayoutParams.MATCH_PARENT, SCROLL_TOP, SCROLL_H))
+        frame.addView(scroll, band(ViewGroup.LayoutParams.MATCH_PARENT, SCROLL_TOP, SCROLL_H))
 
-        // Индикатор разделов: полоса 408…428 px, центр точек 418 (полоса 412…424 требований),
-        // ширина 64 px, по центру экрана.
-        dots = PageDotsView(this).apply {
-            setSection(Sections.PULT, 3)
-        }
-        content.addView(dots, band(DOTS_W, DOTS_TOP, DOTS_H))
+        // Индикатор разделов (полоса 414…434 px) здесь не создаётся: с переходом на одно окно
+        // он один на всё приложение — [SectionsActivity] кладёт его поверх страниц и сам
+        // подсвечивает активный раздел. Второй такой же в этой странице дал бы двойную отрисовку
+        // тех же трёх точек (приглушённые точки стали бы заметно ярче).
 
-        setContentView(root)
         buildRows()
+    }
+
+    /**
+     * Хост вызывает это каждый раз, когда страница стала видимой (и при возврате в раздел):
+     * экран «живой», поэтому перечитываем настройки, батарею и права. Позицию прокрутки
+     * сохраняем — как раньше делал `onResume` у Activity.
+     */
+    override fun onShown() {
+        refreshRows()
     }
 
     /** Полоса по вертикали + центрирование по горизонтали, всё в px. */
@@ -193,7 +187,7 @@ class StatusActivity : ComponentActivity() {
      * во время прокрутки. Шаг квантования [WIDTH_STEP] убирает лишние переразметки.
      */
     private fun updateRowWidths() {
-        if (cards.isEmpty() || !::scroll.isInitialized) return
+        if (cards.isEmpty()) return
         val viewTop = SCROLL_TOP.toFloat()
         val viewBottom = (SCROLL_TOP + SCROLL_H).toFloat()
         val scrollY = scroll.scrollY
@@ -219,20 +213,20 @@ class StatusActivity : ComponentActivity() {
      */
     private fun rowData(): List<Pair<String, String>> {
         val time = String.format(
-            Locale.US, "%02d:%02d", Prefs.targetHour(this), Prefs.targetMinute(this),
+            Locale.US, "%02d:%02d", Prefs.targetHour(host), Prefs.targetMinute(host),
         )
-        val armed = Prefs.alarmAt(this) > System.currentTimeMillis()
-        val mask = Prefs.repeatDays(this)
+        val armed = Prefs.alarmAt(host) > System.currentTimeMillis()
+        val mask = Prefs.repeatDays(host)
         val repeat = (if (mask == RepeatDays.NONE) "выкл" else RepeatDays.label(mask)) +
-            " · окно ±${Prefs.windowMin(this)} мин"
+            " · окно ±${Prefs.windowMin(host)} мин"
         val battery = batteryPct()
 
         val rows = ArrayList<Pair<String, String>>(8)
         rows.add("Будильник" to if (armed) "$time · взведён" else "$time · не взведён")
         rows.add("Повтор" to repeat)
-        rows.add("Отложить" to "${Prefs.snoozeMin(this)} мин")
+        rows.add("Отложить" to "${Prefs.snoozeMin(host)} мин")
         rows.add("Ночной лог" to if (NightLogService.isRunning) "идёт" else "остановлен")
-        val lastWake = Prefs.lastWakePhase(this)
+        val lastWake = Prefs.lastWakePhase(host)
         if (lastWake.isNotEmpty()) rows.add("Последний подъём" to lastWake)
         rows.add("Батарея" to if (battery in 0..100) "$battery%" else "н/д")
         rows.add("Разрешения" to permissionsText())
@@ -242,7 +236,7 @@ class StatusActivity : ComponentActivity() {
 
     /** Карточка-плашка v1: точка акцентом, подпись слева, значение справа; высота 36 dp. */
     private fun makeRow(key: String, value: String): LinearLayout {
-        val card = LinearLayout(this).apply {
+        val card = LinearLayout(host).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(6), 0, dp(7), 0)
@@ -255,7 +249,7 @@ class StatusActivity : ComponentActivity() {
             isFocusable = false
         }
         card.addView(
-            View(this).apply {
+            View(host).apply {
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
                     setColor(Ui.accent)
@@ -266,7 +260,7 @@ class StatusActivity : ComponentActivity() {
             },
         )
         card.addView(
-            TextView(this).apply {
+            TextView(host).apply {
                 text = key
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, TEXT_PX)
                 typeface = Ui.bodyTypeface()
@@ -281,7 +275,7 @@ class StatusActivity : ComponentActivity() {
             ),
         )
         card.addView(
-            TextView(this).apply {
+            TextView(host).apply {
                 text = value
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, TEXT_PX)
                 typeface = Ui.labelTypeface()
@@ -319,46 +313,35 @@ class StatusActivity : ComponentActivity() {
     }
 
     private fun notificationsEnabled(): Boolean = try {
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+        (host.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
             .areNotificationsEnabled()
     } catch (_: Throwable) {
         false
     }
 
     private fun batteryPct(): Int = try {
-        (getSystemService(Context.BATTERY_SERVICE) as BatteryManager)
+        (host.getSystemService(Context.BATTERY_SERVICE) as BatteryManager)
             .getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
     } catch (_: Throwable) {
         -1
     }
 
     private fun has(permission: String): Boolean =
-        checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+        host.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
     private fun appVersion(): String = try {
-        packageManager.getPackageInfo(packageName, 0).versionName ?: "?"
+        host.packageManager.getPackageInfo(host.packageName, 0).versionName ?: "?"
     } catch (_: Throwable) {
         "?"
     }
 
-    // ---------- фон и единицы ----------
-
-    /** Фон экрана: глубокий вертикальный градиент из токенов v1. */
-    private fun screenBackground(): GradientDrawable = GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(
-            Color.parseColor(Ui.BG_TOP),
-            Color.parseColor(Ui.BG_BOTTOM),
-        ),
-    )
-
     private fun dp(v: Int): Int = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics,
+        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), host.resources.displayMetrics,
     ).toInt()
 
     /** Метрики экрана в px (OPW2: 466×466, 1 dp = 2 px). */
     private companion object {
-        /** Полоса заголовка: 96…124 px. */
+        /** Полоса заголовка: 98…126 px. */
         const val TITLE_TOP = 98
         const val TITLE_H = 28
         const val TITLE_W = 312
@@ -380,10 +363,5 @@ class StatusActivity : ComponentActivity() {
         /** Кегли v1: подпись/значение 20 px (не мельче 18 px), заголовок 22 px caps. */
         const val TEXT_PX = 20f
         const val DOT_PX = 12
-
-        /** Индикатор разделов: полоса 408…428 px (центр точек 418), ширина 64 px. */
-        const val DOTS_W = 64
-        const val DOTS_H = 20
-        const val DOTS_TOP = Ui.DOTS_TOP_PX
     }
 }

@@ -2,21 +2,15 @@ package io.github.smartalarm
 
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.activity.ComponentActivity
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -24,11 +18,25 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * Экран 2 «НОЧЬ» — прошлая ночь в **языке v1** (янтарный v2 забракован): градиентный
- * фон `BG_TOP → BG_BOTTOM`, карточка со скруглением и обводкой `Ui.surface` / `Ui.stroke`,
- * полоса фаз цветами `Ui.phaseColor`, линия пульса акцентом с градиентной заливкой,
- * столбики движения `Ui.surfaceHi`, точки-легенда, плашки метрик с числом 44 px,
- * текст сводки. Починена только геометрия и добавлены состояния.
+ * Страница 2 карусели — «ПРОШЛАЯ НОЧЬ»: прошлая ночь в **языке v1** (янтарный v2 забракован).
+ *
+ * Раньше это был отдельный `StatsActivity` (второй раздел приложения). Теперь раздел — страница
+ * внутри одного окна [SectionsActivity]: свайп двигает вьюхи, создания Activity нет. Замерено
+ * на часах: окно новой Activity появляется через 183–551 мс, и это время уходит из того же
+ * главного потока, который рисует анимацию свайпа, — отсюда было «дёрганье». Вёрстка, данные
+ * и координаты перенесены из `StatsActivity` без изменений; поменялась только обвязка:
+ *
+ *  - нет `onCreate` / `onResume` / `onDestroy` / `dispatchTouchEvent` — это делает хост;
+ *  - нет `SectionSwipe` и `dispatchTouchEvent` — свайп и `onResume` обслуживает
+ *    [SectionsActivity], номер раздела берётся из `Sections.NIGHT`;
+ *  - нет `AmbientLifecycleObserver` (AOD в приложении убран совсем);
+ *  - вместо `Activity` контекстом для View/TypedValue/resources служит `host`;
+ *  - `runOnUiThread` — хостовый (`host.runOnUiThread`), файлы — `host.getExternalFilesDir(..)`;
+ *  - чтение ночи (`reload`) вызывается из [onShown], то есть при каждом показе страницы,
+ *    а не в конструкторе: на старте приложения CSV не читается дважды.
+ *
+ * **Фон страницы прозрачный.** Вертикальный градиент `BG_TOP → BG_BOTTOM` рисует хост под всеми
+ * страницами; своя непрозрачная плашка дала бы шов и лишний слой отрисовки при свайпе.
  *
  * **Геометрия.** Всё лежит на абсолютных полосах `y` в координатах экрана 466 × 466 px
  * (1 dp = 2 px), и ширина каждой полосы считается через [RoundScreen.safeRowWidth] —
@@ -53,22 +61,21 @@ import java.util.Locale
  *    теперь фаза подъёма — отдельная полоса 244…268 высотой 24 px при кегле 20 px
  *    (height ≥ кегль + 4), а сводка фаз ушла в две строки 18 px в полосе 272…318;
  *  - точек раздела не было (наезжали на контент) → теперь контент заканчивается на 400,
- *    а точки стоят в своей полосе 412…424.
+ *    а точки стоят в своей полосе 414…434.
  *
- * **Содержимое.** Заголовок, карточка графика (сетка, полосы фаз, линия пульса, столбики
- * движения, подписи времени), легенда фаз, строка «разбудил», две строки сводки, две плашки
- * метрик и индикатор раздела. Навигация по кругу разделов — [SectionSwipe] (`Sections.NIGHT`),
- * ручной разбор свайпов удалён: цикл 1 → 2 → 3 → 1 обеспечивает [SwipeSections].
+ * **Содержимое.** Заголовок, карточка графика ([SleepChartView]: сетка, полосы фаз, линия
+ * пульса, столбики движения, подписи времени), легенда фаз, строка «разбудил», две строки
+ * сводки, две плашки метрик и индикатор раздела.
  *
  * Данные не менялись: `probe_*.csv` из `getExternalFilesDir(null) ?: filesDir`, приоритет
  * файлу со `triggered` + `wake_phase`, [SleepStats.summarize] в фоновом `Thread`.
  */
-class StatsActivity : ComponentActivity() {
+class NightPage(host: SectionsActivity) : SectionPage(host) {
 
-    private lateinit var root: FrameLayout
+    override val root: View
 
-    /** Слой, который тянется за пальцем при свайпе между разделами. */
-    private lateinit var content: FrameLayout
+    /** Раздел «Ночь» — второй в карусели (1-based), всего разделов три. */
+    override val section: Int get() = Sections.NIGHT
 
     private lateinit var titleView: TextView
     private lateinit var chart: SleepChartView
@@ -80,10 +87,6 @@ class StatsActivity : ComponentActivity() {
     private lateinit var chipLabel1: TextView
     private lateinit var chipValue2: TextView
     private lateinit var chipLabel2: TextView
-    private lateinit var dots: PageDotsView
-    private lateinit var swipe: SectionSwipe
-
-    private val handler = Handler(Looper.getMainLooper())
 
     /** Только для подгонки кегля под ширину полосы: трекинг считаем сами. */
     private val fitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -94,90 +97,73 @@ class StatsActivity : ComponentActivity() {
     private val timeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
         .withZone(ZoneId.systemDefault())
 
-    // ---------- жизненный цикл ----------
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        buildUi()
-        load()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        // После slide-перехода между разделами контент возвращаем на место.
-        if (::swipe.isInitialized) swipe.reset()
-    }
-
-    override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
-        super.onDestroy()
-    }
-
     /**
-     * Навигация по кругу разделов (R11–R13). Жест целиком обслуживает [SectionSwipe]:
-     * он же тянет `content` за пальцем, доводит и открывает соседний раздел со
-     * slide-переходом. Свой разбор свайпов и `finish()`/`startActivity` из v1 удалены.
+     * Номер последнего запроса на чтение. Ответ устаревшего потока (пользователь успел
+     * свайпнуть туда-обратно) не должен перетереть более свежие данные.
      */
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (::swipe.isInitialized) swipe.handle(ev)
-        return super.dispatchTouchEvent(ev)
+    private var loadGeneration = 0
+
+    init {
+        // Построение вьюх — один раз на старте приложения (не на свайпе), поэтому тяжёлую часть
+        // держим здесь; чтение CSV — только в [onShown].
+        root = buildUi()
+    }
+
+    /** Страница стала текущей — перечитать ночь. */
+    override fun onShown() {
+        reload()
     }
 
     // ---------- вёрстка ----------
 
-    private fun buildUi() {
-        // Фон градиентом лежит и на root, и на content: при свайпе контент уезжает
-        // вместе со своим фоном, а root не оставляет «дыры» на краю экрана.
-        root = FrameLayout(this).apply { background = screenGradient() }
-        content = FrameLayout(this).apply { background = screenGradient() }
-        root.addView(
-            content,
-            FrameLayout.LayoutParams(
+    private fun buildUi(): View {
+        // Фон рисует хост (градиент под всеми страницами). Своя плашка не нужна: при свайпе
+        // непрозрачный прямоугольник страницы дал бы шов с края экрана и лишний слой.
+        val page = FrameLayout(host).apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
-            ),
-        )
+            )
+        }
 
         // 1. Заголовок: y 90…118, 22 px caps, акцент (height 28 >= кегль 22 + 4).
         titleView = label("ПРОШЛАЯ НОЧЬ", SZ_TITLE, Ui.accent, LS_TITLE)
-        content.addView(titleView, band(BAND_TITLE_TOP, BAND_TITLE_BOTTOM, W_TITLE))
+        page.addView(titleView, band(BAND_TITLE_TOP, BAND_TITLE_BOTTOM, W_TITLE))
         fitOneLine(titleView, MIN_TITLE)
 
         // 2. Карточка графика: y 122…214, единственный широкий блок (в средней полосе).
-        chart = SleepChartView(this)
-        content.addView(chart, band(BAND_CHART_TOP, BAND_CHART_BOTTOM, W_CHART))
+        chart = SleepChartView(host)
+        page.addView(chart, band(BAND_CHART_TOP, BAND_CHART_BOTTOM, W_CHART))
 
         // 3. Легенда фаз: ● глубокий ● лёгкий ● бодрств.
         legendRow = buildLegend()
-        content.addView(legendRow, band(BAND_LEGEND_TOP, BAND_LEGEND_BOTTOM, W_LEGEND))
+        page.addView(legendRow, band(BAND_LEGEND_TOP, BAND_LEGEND_BOTTOM, W_LEGEND))
 
         // 4. Фаза подъёма: y 244…268, читаемые 20 px (в v1 это был обрезанный футер 8 sp).
         wakeView = label("читаю лог…", SZ_WAKE, Ui.textSecondary, 0f)
-        content.addView(wakeView, band(BAND_WAKE_TOP, BAND_WAKE_BOTTOM, W_WAKE))
+        page.addView(wakeView, band(BAND_WAKE_TOP, BAND_WAKE_BOTTOM, W_WAKE))
         fitOneLine(wakeView, MIN_WAKE)
 
         // 5. Сводка: две строки 18 px, y 272…318.
         summaryView = block()
-        content.addView(summaryView, band(BAND_SUMMARY_TOP, BAND_SUMMARY_BOTTOM, W_SUMMARY))
+        page.addView(summaryView, band(BAND_SUMMARY_TOP, BAND_SUMMARY_BOTTOM, W_SUMMARY))
 
         // 6. Плашки метрик: число 44 px + подпись, y 322…400.
         chipsRow = buildChips()
-        content.addView(chipsRow, band(BAND_CHIPS_TOP, BAND_CHIPS_BOTTOM, W_CHIPS))
+        page.addView(chipsRow, band(BAND_CHIPS_TOP, BAND_CHIPS_BOTTOM, W_CHIPS))
 
-        // 7. Индикатор раздела 2/3 — отдельная полоса под контентом (y 412…424),
-        //    поэтому он больше не наезжает ни на сводку, ни на чипы.
-        dots = PageDotsView(this).apply { setSection(Sections.NIGHT, SECTIONS_TOTAL) }
-        root.addView(dots, band(BAND_DOTS_TOP, BAND_DOTS_BOTTOM, W_DOTS))
+        // 7. Индикатор раздела рисует хост (`SectionsActivity`) один на всё приложение
+        //    в полосе y 414…434 — второй экземпляр здесь дублировал бы те же три точки.
 
-        swipe = SectionSwipe(this, Sections.NIGHT, content)
-        setContentView(root)
         // Самопроверка уже после первой раскладки (иначе ширин ещё нет).
-        root.postDelayed({ verifyWithinCircle() }, GEOMETRY_CHECK_DELAY_MS)
+        page.postDelayed({ verifyWithinCircle(page) }, GEOMETRY_CHECK_DELAY_MS)
+        return page
     }
 
     /**
-     * Полоса `top…bottom` с абсолютной позицией (как в [AlarmSetupActivity]) и шириной,
-     * урезанной по дуге круга: `safeRowWidth` берёт максимум по обоим краям полосы,
+     * Полоса `top…bottom` с абсолютной позицией (как в `StatsActivity`/`AlarmSetupActivity`)
+     * и шириной, урезанной по дуге круга: `safeRowWidth` берёт максимум по обоим краям полосы,
      * поэтому даже высокий блок у дуги не обрежется. [EDGE_MARGIN_PX] — зазор до дуги,
      * чтобы угол прямоугольника не касался края экрана.
      */
@@ -190,15 +176,9 @@ class StatsActivity : ComponentActivity() {
         }
     }
 
-    /** Фон экрана: глубокий вертикальный градиент из токенов v1. */
-    private fun screenGradient(): Drawable = GradientDrawable(
-        GradientDrawable.Orientation.TOP_BOTTOM,
-        intArrayOf(Color.parseColor(Ui.BG_TOP), Color.parseColor(Ui.BG_BOTTOM)),
-    )
-
     /** Однострочная подпись в типографике v1: caps, трекинг, центр. */
     private fun label(value: String, sizePx: Float, color: Int, tracking: Float): TextView =
-        TextView(this).apply {
+        TextView(host).apply {
             text = value
             setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
             setTextColor(color)
@@ -211,7 +191,7 @@ class StatsActivity : ComponentActivity() {
         }
 
     /** Абзац сводки: две строки, обычный вес — длинный текст читается, а не обрезается. */
-    private fun block(): TextView = TextView(this).apply {
+    private fun block(): TextView = TextView(host).apply {
         setTextSize(TypedValue.COMPLEX_UNIT_PX, SZ_SUMMARY)
         setTextColor(Ui.textSecondary)
         includeFontPadding = false
@@ -224,7 +204,7 @@ class StatsActivity : ComponentActivity() {
 
     /** Легенда: точка ⌀12 px + подпись 18 px, цвет точки — из `Ui.phaseColor`. */
     private fun buildLegend(): LinearLayout {
-        val row = LinearLayout(this).apply {
+        val row = LinearLayout(host).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
@@ -235,13 +215,13 @@ class StatsActivity : ComponentActivity() {
             Item(Ui.phaseAwake, "бодрств."),
         )
         items.forEachIndexed { index, item ->
-            val cell = LinearLayout(this).apply {
+            val cell = LinearLayout(host).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 if (index > 0) setPadding(LEGEND_GAP_PX, 0, 0, 0)
             }
             cell.addView(
-                View(this).apply {
+                View(host).apply {
                     background = GradientDrawable().apply {
                         shape = GradientDrawable.OVAL
                         setColor(item.color)
@@ -259,7 +239,7 @@ class StatsActivity : ComponentActivity() {
 
     /** Две плашки метрик: число 44 px тонким шрифтом, подпись 18 px под ним. */
     private fun buildChips(): LinearLayout {
-        val row = LinearLayout(this).apply {
+        val row = LinearLayout(host).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
@@ -284,7 +264,7 @@ class StatsActivity : ComponentActivity() {
 
     /** Плашка: поверхность `Ui.surface`, обводка `Ui.stroke`, радиус 14 dp. */
     private fun chip(value: TextView, caption: TextView): LinearLayout =
-        LinearLayout(this).apply {
+        LinearLayout(host).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(CHIP_PAD_X_DP), dp(CHIP_PAD_Y_DP), dp(CHIP_PAD_X_DP), dp(CHIP_PAD_Y_DP))
@@ -340,7 +320,13 @@ class StatsActivity : ComponentActivity() {
 
     // ---------- данные (не менялись с v1) ----------
 
-    private fun load() {
+    /**
+     * Чтение ночи — только по показу страницы ([onShown]), не на старте приложения:
+     * файл разбирается в фоновом потоке, потому что `parse` + `summarize` на 5-часовом
+     * логе — это десятки тысяч строк, и в главном потоке они превращаются в рывок.
+     */
+    private fun reload() {
+        val generation = ++loadGeneration
         Thread {
             val file = bestProbeFile()
             val night = try {
@@ -348,7 +334,10 @@ class StatsActivity : ComponentActivity() {
             } catch (_: Throwable) {
                 null
             }
-            runOnUiThread { render(file, night) }
+            host.runOnUiThread {
+                // Пока читали, страницу могли показать ещё раз — рендерим только свежий ответ.
+                if (generation == loadGeneration) render(file, night)
+            }
         }.start()
     }
 
@@ -426,7 +415,7 @@ class StatsActivity : ComponentActivity() {
      * самый информативный по размеру.
      */
     private fun bestProbeFile(): File? {
-        val dir = getExternalFilesDir(null) ?: filesDir
+        val dir = host.getExternalFilesDir(null) ?: host.filesDir
         val files = dir.listFiles()
             ?.filter { it.isFile && it.name.startsWith("probe_") && it.name.endsWith(".csv") }
             ?: return null
@@ -454,12 +443,10 @@ class StatsActivity : ComponentActivity() {
      * внутри круга `r = 209`. Нарушение — в [UiLog], его видно из probe-лога.
      * Ширины уже посчитаны через [RoundScreen.safeRowWidth]; это контроль, а не расчёт.
      */
-    private fun verifyWithinCircle() {
-        val views = ArrayList<View>()
-        for (i in 0 until content.childCount) views.add(content.getChildAt(i))
-        if (::dots.isInitialized) views.add(dots)
-        views.forEachIndexed { index, view ->
-            if (view.width <= 0 || view.visibility != View.VISIBLE) return@forEachIndexed
+    private fun verifyWithinCircle(page: ViewGroup) {
+        for (index in 0 until page.childCount) {
+            val view = page.getChildAt(index)
+            if (view.width <= 0 || view.visibility != View.VISIBLE) continue
             val inside = RoundScreen.fits(
                 view.left.toFloat(),
                 view.top.toFloat(),
@@ -468,7 +455,7 @@ class StatsActivity : ComponentActivity() {
             )
             if (!inside) {
                 UiLog.add(
-                    "stats geometry: #$index [${view.left},${view.top}]" +
+                    "night geometry: #$index [${view.left},${view.top}]" +
                         "[${view.right},${view.bottom}] вне r=${Ui.SAFE_RADIUS_PX}",
                 )
             }
@@ -476,10 +463,13 @@ class StatsActivity : ComponentActivity() {
     }
 
     private fun dp(v: Int): Int = TypedValue.applyDimension(
-        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics,
+        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), host.resources.displayMetrics,
     ).toInt()
 
     private companion object {
+        /** Разделов в карусели три (совпадает с `Sections.HOME/NIGHT/PULT`). */
+        const val PAGES = 3
+
         // ---------- вертикальные полосы, px (1 dp = 2 px на OPW2 466×466) ----------
         const val BAND_TITLE_TOP = 90
         const val BAND_TITLE_BOTTOM = 118
@@ -530,9 +520,6 @@ class StatsActivity : ComponentActivity() {
         /** Сводка: две строки, межстрочный зазор 2 px. */
         const val SUMMARY_LINES = 2
         const val SUMMARY_LINE_GAP_PX = 2f
-
-        // ---------- индикатор раздела ----------
-        const val SECTIONS_TOTAL = 3
 
         // ---------- плашки ----------
         const val CHIP_GAP_PX = 6
