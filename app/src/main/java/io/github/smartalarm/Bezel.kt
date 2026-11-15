@@ -90,8 +90,8 @@ class BezelView @JvmOverloads constructor(
         if (ambient) {
             // R9: в AOD — только тонкое кольцо, без шкалы (иначе кольцо и риски спорят за полосу).
             ringPaint.strokeWidth = 1f * k
-            ringPaint.color = Ui.alpha(Ui.paper3, AMB_RING_ALPHA)
-            canvas.drawCircle(cx, cy, AMB_RING_R * k, ringPaint)
+            ringPaint.color = Ui.alpha(Ui.paper3, Bezel.AMB_RING_ALPHA)
+            canvas.drawCircle(cx, cy, Bezel.AMB_RING_R * k, ringPaint)
         } else {
             tickMinor.alpha = 255
             tickMajor.alpha = 255
