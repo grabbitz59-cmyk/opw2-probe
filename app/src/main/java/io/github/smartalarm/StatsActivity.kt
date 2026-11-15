@@ -1,6 +1,10 @@
 package io.github.smartalarm
 
+import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -16,62 +20,91 @@ import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.wear.ambient.AmbientLifecycleObserver
 import java.io.File
-import kotlin.math.abs
-import kotlin.math.sqrt
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
- * Экран 2 «НОЧЬ» — статистика прошлой ночи (§3.3 `docs/design-v2.md`).
+ * Экран 2 «НОЧЬ» — прошлая ночь в **языке v1** (янтарный v2 забракован): градиентный
+ * фон `BG_TOP → BG_BOTTOM`, карточка со скруглением и обводкой `Ui.surface` / `Ui.stroke`,
+ * полоса фаз цветами `Ui.phaseColor`, линия пульса акцентом с градиентной заливкой,
+ * столбики движения `Ui.surfaceHi`, точки-легенда, плашки метрик с числом 44 px,
+ * текст сводки. Починена только геометрия и добавлены состояния.
  *
- * Один вопрос за 0.5 с (R5): «как я спал и в какой фазе меня разбудили». Скролла нет:
- * гипнограмма + строка метрик + фаза подъёма. Длинная сводка (покрытие, батарея, файл)
- * переехала в служебные строки экрана 3.
+ * **Геометрия.** Всё лежит на абсолютных полосах `y` в координатах экрана 466 × 466 px
+ * (1 dp = 2 px), и ширина каждой полосы считается через [RoundScreen.safeRowWidth] —
+ * прямоугольник полосы гарантированно внутри круга `r = 209` (R1–R2). Блоки:
  *
- * Данные — те же, что были в v1: ночной `probe_*.csv` из `getExternalFilesDir(null)`,
- * приоритет файлу со строкой `triggered` + `wake_phase`, разбор через [SleepStats].
- * Переписана только вёрстка.
+ * | полоса, y   | элемент              | ширина | кегль |
+ * |-------------|----------------------|--------|-------|
+ * |  90…118     | заголовок            | 260 px | 22 px |
+ * | 122…214     | карточка графика     | 336 px | 16 px (подписи времени) |
+ * | 218…240     | легенда фаз          | 300 px | 18 px |
+ * | 244…268     | фаза подъёма         | 312 px | 20 px |
+ * | 272…318     | сводка (2 строки)    | 330 px | 18 px |
+ * | 322…400     | чипы метрик 2 × 118  | 242 px | 44 px число / 18 px подпись |
+ * | 414…434     | индикатор раздела    |  64 px | — (PageDotsView) |
  *
- * Геометрия: все полосы — абсолютные `topMargin` (как в [AlarmSetupActivity]), ширина
- * урезается так, чтобы **все четыре угла** прямоугольника лежали внутри `r = Ui.BEZEL_IN`
- * (контент не заходит в annulus обода 188…208). Тексты дополнительно ужимаются по кеглю,
- * поэтому в полосе не бывает многоточия.
+ * Карточка графика — единственный элемент шире 250 px, и она стоит в средней полосе
+ * (`y` 122…214: лимит круга 354 px при 336 используемых). Что было сломано в v1 и чем
+ * это закрыто:
+ *  - заголовок v1 стоял `[96,44][370,72]` → угол на 233 px от центра; теперь полоса
+ *    90…118 с шириной 260 px → максимум 193 px;
+ *  - футер `≈ глубокий … бодрств.` v1 стоял `[96,405][370,410]` → 223.8 px и высота 5 px;
+ *    теперь фаза подъёма — отдельная полоса 244…268 высотой 24 px при кегле 20 px
+ *    (height ≥ кегль + 4), а сводка фаз ушла в две строки 18 px в полосе 272…318;
+ *  - точек раздела не было (наезжали на контент) → теперь контент заканчивается на 400,
+ *    а точки стоят в своей полосе 412…424.
  *
- * Навигация — свайпом через [SectionSwipe] (R11–R13), AOD — через [AmbientLifecycleObserver]:
- * в покое остаются заголовок и базовая линейка гипнограммы.
+ * **Состояния.** AOD через [AmbientLifecycleObserver]: чёрный фон `#000000`, притушённые
+ * заголовок и график без сетки/столбиков/анимаций, остальное скрыто. Отладочный вход —
+ * `adb shell am start -n io.github.smartalarm/.StatsActivity --ez force_ambient true`.
+ * Навигация по кругу разделов — [SectionSwipe] (`Sections.NIGHT`), ручной разбор свайпов
+ * удалён: цикл 1 → 2 → 3 → 1 обеспечивает [SwipeSections].
+ *
+ * Данные не менялись: `probe_*.csv` из `getExternalFilesDir(null) ?: filesDir`, приоритет
+ * файлу со `triggered` + `wake_phase`, [SleepStats.summarize] в фоновом `Thread`.
  */
 class StatsActivity : ComponentActivity() {
 
     private lateinit var root: FrameLayout
 
-    /** Контент, который тянется за пальцем при свайпе между разделами. */
+    /** Слой, который тянется за пальцем при свайпе между разделами. */
     private lateinit var content: FrameLayout
 
-    private lateinit var index: SectionIndexView
-    private lateinit var bezel: BezelView
     private lateinit var titleView: TextView
-    private lateinit var metricsView: TextView
-    private lateinit var chart: HypnogramView
+    private lateinit var chart: SleepChartView
     private lateinit var legendRow: LinearLayout
-    private lateinit var wakeLabel: TextView
-    private lateinit var wakeValue: TextView
+    private lateinit var wakeView: TextView
+    private lateinit var summaryView: TextView
+    private lateinit var chipsRow: LinearLayout
+    private lateinit var chipValue1: TextView
+    private lateinit var chipLabel1: TextView
+    private lateinit var chipValue2: TextView
+    private lateinit var chipLabel2: TextView
+    private lateinit var dots: PageDotsView
     private lateinit var swipe: SectionSwipe
 
     private var ambientObserver: AmbientLifecycleObserver? = null
     private val handler = Handler(Looper.getMainLooper())
 
-    /** Только для измерения ширины строки; типографика — как у TextView из [Ui.label]. */
-    private val fitPaint: Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Ui.condensed()
+    /** Только для подгонки кегля под ширину полосы: трекинг считаем сами. */
+    private val fitPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Ui.labelTypeface()
         textAlign = Paint.Align.LEFT
-        // Трекинг считаем сами: так `measureText` гарантированно отдаёт сумму литерал.
-        letterSpacing = 0f
     }
+
+    private val timeFmt: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
+        .withZone(ZoneId.systemDefault())
+
+    // ---------- жизненный цикл ----------
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         buildUi()
         setupAmbient()
-        // Отладка AOD без включённого AOD на устройстве:
-        // adb shell am start -n io.github.smartalarm/.StatsActivity --ez force_ambient true
+        // Отладка AOD без включённого AOD на устройстве (как в HomeActivity).
         if (intent?.getBooleanExtra("force_ambient", false) == true) {
             handler.postDelayed({ applyAmbient(true) }, DEMO_AMBIENT_DELAY_MS)
         }
@@ -80,7 +113,7 @@ class StatsActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Возвращаемся на место после slide-перехода между разделами.
+        // После slide-перехода между разделами контент возвращаем на место.
         if (::swipe.isInitialized) swipe.reset()
     }
 
@@ -89,6 +122,11 @@ class StatsActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /**
+     * Навигация по кругу разделов (R11–R13). Жест целиком обслуживает [SectionSwipe]:
+     * он же тянет `content` за пальцем, доводит и открывает соседний раздел со
+     * slide-переходом. Свой разбор свайпов и `finish()`/`startActivity` из v1 удалены.
+     */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (::swipe.isInitialized) swipe.handle(ev)
         return super.dispatchTouchEvent(ev)
@@ -105,7 +143,7 @@ class StatsActivity : ComponentActivity() {
                 }
 
                 override fun onUpdateAmbient() {
-                    // Экран статичный: перерисовывать в AOD нечего.
+                    // Экран статичный: в AOD перерисовывать нечего (R9 — без анимаций).
                 }
 
                 override fun onExitAmbient() {
@@ -116,32 +154,33 @@ class StatsActivity : ComponentActivity() {
     }
 
     /**
-     * В покое остаются только заголовок (притушённый) и базовая линейка гипнограммы —
-     * ни подписей, ни фаз, ни янтаря: так AMOLED не выжигается.
+     * В покое остаются только чёрный фон, притушённый заголовок и график без сетки,
+     * столбиков и анимаций: легенда, фаза, сводка, чипы и точки скрыты, чтобы AMOLED
+     * не выжигался (R9).
      */
     private fun applyAmbient(on: Boolean) {
-        if (!::root.isInitialized || !::content.isInitialized) return
-        val bg = if (on) Ui.bgAmbient else Ui.bg
-        root.setBackgroundColor(bg)
-        content.setBackgroundColor(bg)
-        titleView.setTextColor(if (on) Ui.paper3 else Ui.ember)
-        if (::bezel.isInitialized) bezel.setAmbient(on)
-        val v = if (on) View.INVISIBLE else View.VISIBLE
-        index.visibility = v
-        metricsView.visibility = v
-        legendRow.visibility = v
-        wakeLabel.visibility = v
-        wakeValue.visibility = v
+        if (!::root.isInitialized) return
+        // В AOD — только чёрный фон (R9): градиент убираем, чтобы не светить AMOLED.
+        val bg: Drawable = if (on) ColorDrawable(Color.BLACK) else screenGradient()
+        root.background = bg
+        content.background = if (on) ColorDrawable(Color.BLACK) else screenGradient()
+        titleView.setTextColor(if (on) Ui.textTertiary else Ui.accent)
         chart.setAmbient(on)
+        val v = if (on) View.INVISIBLE else View.VISIBLE
+        legendRow.visibility = v
+        wakeView.visibility = v
+        summaryView.visibility = v
+        chipsRow.visibility = v
+        dots.visibility = v
     }
 
     // ---------- вёрстка ----------
 
     private fun buildUi() {
-        // Фон плоский и лежит и на root, и на content (как в HomeActivity): при свайпе
-        // контент уезжает вместе со своим фоном, а root не даёт «дыры» на краю.
-        root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
-        content = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
+        // Фон градиентом лежит и на root, и на content: при свайпе контент уезжает
+        // вместе со своим фоном, а root не оставляет «дыры» на краю экрана.
+        root = FrameLayout(this).apply { background = screenGradient() }
+        content = FrameLayout(this).apply { background = screenGradient() }
         root.addView(
             content,
             FrameLayout.LayoutParams(
@@ -150,184 +189,207 @@ class StatsActivity : ComponentActivity() {
             ),
         )
 
-        // Обод: та же шкала 72 риски, что на главном, — иначе экраны не читаются как один прибор.
-        bezel = BezelView(this)
-        content.addView(
-            bezel,
-            FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-            ),
-        )
+        // 1. Заголовок: y 90…118, 22 px caps, акцент (height 28 >= кегль 22 + 4).
+        titleView = label("ПРОШЛАЯ НОЧЬ", SZ_TITLE, Ui.accent, LS_TITLE)
+        content.addView(titleView, band(BAND_TITLE_TOP, BAND_TITLE_BOTTOM, W_TITLE))
+        fitOneLine(titleView, MIN_TITLE)
 
-        // y 60–72: индикатор раздела (2/3). Верх — из токена Ui.INDEX_TOP, не хардкод.
-        index = SectionIndexView(this).apply { active = Sections.NIGHT }
-        content.addView(index, band(top = Ui.INDEX_TOP.toInt(), height = 12, widthCap = 64f))
+        // 2. Карточка графика: y 122…214, единственный широкий блок (в средней полосе).
+        chart = SleepChartView(this)
+        content.addView(chart, band(BAND_CHART_TOP, BAND_CHART_BOTTOM, W_CHART))
 
-        // y 96–124: заголовок.
-        titleView = label("ПРОШЛАЯ НОЧЬ", Ui.SZ_TITLE, Ui.ember, Ui.LS_TITLE)
-        content.addView(titleView, band(top = 96, height = 28, widthCap = 300f))
-        fitText(titleView, Ui.SZ_TITLE)
-
-        // y 132–156: строка метрик «6Ч 42М · 58 УД · 92%».
-        metricsView = label("—", Ui.SZ_METRICS, Ui.paper2, Ui.LS_DETAIL)
-        content.addView(metricsView, band(top = 132, height = 24, widthCap = 320f))
-
-        // y 164–286: гипнограмма 320 × 122.
-        chart = HypnogramView(this)
-        content.addView(chart, band(top = 164, height = 122, widthCap = 320f))
-
-        // y 292–316: легенда тремя глифами (глубина кодируется и шириной глифа).
+        // 3. Легенда фаз: ● глубокий ● лёгкий ● бодрств.
         legendRow = buildLegend()
-        content.addView(legendRow, band(top = 292, height = 24, widthCap = 300f))
+        content.addView(legendRow, band(BAND_LEGEND_TOP, BAND_LEGEND_BOTTOM, W_LEGEND))
 
-        // y 322–346: подпись фазы.
-        wakeLabel = label("РАЗБУДИЛ В ФАЗЕ", Ui.SZ_LEGEND, Ui.paper3, Ui.LS_DETAIL)
-        content.addView(wakeLabel, band(top = 322, height = 24, widthCap = 300f))
-        fitText(wakeLabel, Ui.SZ_LEGEND)
+        // 4. Фаза подъёма: y 244…268, читаемые 20 px (в v1 это был обрезанный футер 8 sp).
+        wakeView = label("читаю лог…", SZ_WAKE, Ui.textSecondary, 0f)
+        content.addView(wakeView, band(BAND_WAKE_TOP, BAND_WAKE_BOTTOM, W_WAKE))
+        fitOneLine(wakeView, MIN_WAKE)
 
-        // y 348–396: значение фазы. Ширина ≤ 187 px — короткие формы («ЛЁГК.», «ГЛУБ.», «БОДР.»).
-        wakeValue = label("—", Ui.SZ_BIG, Ui.ember, 0f)
-        content.addView(wakeValue, band(top = 348, height = 48, widthCap = 187f))
+        // 5. Сводка: две строки 18 px, y 272…318.
+        summaryView = block()
+        content.addView(summaryView, band(BAND_SUMMARY_TOP, BAND_SUMMARY_BOTTOM, W_SUMMARY))
+
+        // 6. Плашки метрик: число 44 px + подпись, y 322…400.
+        chipsRow = buildChips()
+        content.addView(chipsRow, band(BAND_CHIPS_TOP, BAND_CHIPS_BOTTOM, W_CHIPS))
+
+        // 7. Индикатор раздела 2/3 — отдельная полоса под контентом (y 412…424),
+        //    поэтому он больше не наезжает ни на сводку, ни на чипы.
+        dots = PageDotsView(this).apply { setSection(Sections.NIGHT, SECTIONS_TOTAL) }
+        root.addView(dots, band(BAND_DOTS_TOP, BAND_DOTS_BOTTOM, W_DOTS))
 
         swipe = SectionSwipe(this, Sections.NIGHT, content)
         setContentView(root)
+        // Самопроверка уже после первой раскладки (иначе ширин ещё нет).
+        root.postDelayed({ verifyWithinCircle() }, GEOMETRY_CHECK_DELAY_MS)
     }
 
-    /** TextView в токенах v2: caps, трекинг, центр — фабрика [Ui.label]. */
-    private fun label(text: String, px: Float, color: Int, letterSpacing: Float): TextView =
-        Ui.label(this, text, px, color, letterSpacing, caps = true).apply {
-            gravity = Gravity.CENTER
-            // Последний рубеж: если кегль уже минимальный, длинная строка получит многоточие.
-            ellipsize = TextUtils.TruncateAt.END
-        }
-
     /**
-     * Полоса `top…top+height` с абсолютной позицией (как в [AlarmSetupActivity]) и шириной,
-     * урезанной так, чтобы прямоугольник целиком лежал внутри окружности обода `r = 188`,
-     * но не шире таблицы дизайна.
+     * Полоса `top…bottom` с абсолютной позицией (как в [AlarmSetupActivity]) и шириной,
+     * урезанной по дуге круга: `safeRowWidth` берёт максимум по обоим краям полосы,
+     * поэтому даже высокий блок у дуги не обрежется. [EDGE_MARGIN_PX] — зазор до дуги,
+     * чтобы угол прямоугольника не касался края экрана.
      */
-    private fun band(top: Int, height: Int, widthCap: Float): FrameLayout.LayoutParams {
-        val lp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height).apply {
+    private fun band(top: Int, bottom: Int, widthCap: Float): FrameLayout.LayoutParams {
+        val safe = RoundScreen.safeRowWidth(top.toFloat(), bottom.toFloat()) - EDGE_MARGIN_PX
+        val w = if (safe > 0f) minOf(widthCap, safe).toInt().coerceAtLeast(1) else widthCap.toInt()
+        return FrameLayout.LayoutParams(w, bottom - top).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
             topMargin = top
         }
-        val bottom = (top + height).toFloat()
-        // Модель RoundScreen (R = 209) — базовая; annulus обода (R = 188) жёстче, берём её.
-        val inModel = RoundScreen.safeRowWidth(top.toFloat(), bottom)
-        val insideBezel = safeRowWidthBezel(top.toFloat(), bottom)
-        val safe = minOf(inModel, insideBezel) - ROW_SIDE_PAD_PX
-        lp.width = if (safe > 0f) {
-            minOf(widthCap, safe).toInt().coerceAtLeast(1)
-        } else {
-            widthCap.toInt()
+    }
+
+    /** Фон экрана: глубокий вертикальный градиент из токенов v1. */
+    private fun screenGradient(): Drawable = GradientDrawable(
+        GradientDrawable.Orientation.TOP_BOTTOM,
+        intArrayOf(Color.parseColor(Ui.BG_TOP), Color.parseColor(Ui.BG_BOTTOM)),
+    )
+
+    /** Однострочная подпись в типографике v1: caps, трекинг, центр. */
+    private fun label(value: String, sizePx: Float, color: Int, tracking: Float): TextView =
+        TextView(this).apply {
+            text = value
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
+            setTextColor(color)
+            includeFontPadding = false
+            gravity = Gravity.CENTER
+            letterSpacing = tracking
+            typeface = Ui.labelTypeface()
+            setSingleLine(true)
+            ellipsize = TextUtils.TruncateAt.END
         }
-        return lp
+
+    /** Абзац сводки: две строки, обычный вес — длинный текст читается, а не обрезается. */
+    private fun block(): TextView = TextView(this).apply {
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, SZ_SUMMARY)
+        setTextColor(Ui.textSecondary)
+        includeFontPadding = false
+        gravity = Gravity.CENTER
+        typeface = Ui.bodyTypeface()
+        setLineSpacing(SUMMARY_LINE_GAP_PX, 1f)
+        maxLines = SUMMARY_LINES
+        ellipsize = TextUtils.TruncateAt.END
     }
 
-    /**
-     * Максимальная ширина полосы, у которой **все четыре угла** лежат внутри `r = Ui.BEZEL_IN`
-     * (188 px): контент не заходит в annulus обода 188…208 даже по диагонали.
-     */
-    private fun safeRowWidthBezel(top: Float, bottom: Float): Float {
-        val dyMax = maxOf(abs(top - Ui.CY), abs(bottom - Ui.CY))
-        if (dyMax >= Ui.BEZEL_IN) return 0f
-        val r = Ui.BEZEL_IN
-        return 2f * sqrt(r * r - dyMax * dyMax)
-    }
-
-    /**
-     * Ужимает кегль под фактическую ширину полосы: caps + tracking в этой типографике широкие,
-     * а строка обязана влезть целиком — без многоточия и без выхода за обод.
-     * Ниже 24 px (§2.2 design-v2) не опускаемся.
-     */
-    private fun fitText(view: TextView, preferPx: Float) {
-        val lp = view.layoutParams
-        if (lp == null || lp.width <= 0) return
-        val maxW = (lp.width - TEXT_SIDE_PAD_PX).toFloat()
-        if (maxW <= 0f) return
-        val text = view.text.toString()
-        if (text.isEmpty()) return
-        var size = preferPx
-        while (size > Ui.SZ_TELEMETRY) {
-            if (measuredWidth(text, size, view.letterSpacing) <= maxW) break
-            size -= 1f
-        }
-        view.setTextSize(TypedValue.COMPLEX_UNIT_PX, size)
-    }
-
-    /** Ширина строки: сумма литерал + tracking (в `Paint.measureText` трекинга нет). */
-    private fun measuredWidth(text: String, px: Float, letterSpacing: Float): Float {
-        fitPaint.textSize = px
-        val tracking = px * letterSpacing * text.length
-        return fitPaint.measureText(text) + tracking
-    }
-
-    /**
-     * Легенда: три пары «глиф + подпись». Ширина глифа кодирует глубину
-     * (▍ глубже ▎ ▏), цвет — фаза из `Ui.phaseColor`, подпись — `Ui.phaseShort`.
-     */
+    /** Легенда: точка ⌀12 px + подпись 18 px, цвет точки — из `Ui.phaseColor`. */
     private fun buildLegend(): LinearLayout {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        val glyphs = arrayOf("▍", "▎", "▏")
-        val colors = intArrayOf(Ui.ember, Ui.emberDim, Ui.phaseAwakeColor)
-        val stages = arrayOf(SleepStats.Stage.DEEP, SleepStats.Stage.LIGHT, SleepStats.Stage.AWAKE)
-
-        for (i in stages.indices) {
+        data class Item(val color: Int, val caption: String)
+        val items = listOf(
+            Item(Ui.phaseDeep, "глубокий"),
+            Item(Ui.phaseLight, "лёгкий"),
+            Item(Ui.phaseAwake, "бодрств."),
+        )
+        items.forEachIndexed { index, item ->
             val cell = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                if (i > 0) setPadding(LEGEND_GAP_PX, 0, 0, 0)
+                if (index > 0) setPadding(LEGEND_GAP_PX, 0, 0, 0)
             }
-
-            val glyph = TextView(this).apply {
-                text = glyphs[i]
-                setTextColor(colors[i])
-                typeface = Ui.condensed()
-                setTextSize(TypedValue.COMPLEX_UNIT_PX, Ui.SZ_LEGEND)
-                letterSpacing = 0f
-                includeFontPadding = false
-                setSingleLine(true)
-                gravity = Gravity.CENTER
-            }
-            val caption = Ui.label(
-                this,
-                Ui.phaseShort(stages[i]),
-                Ui.SZ_LEGEND,
-                Ui.paper3,
-                Ui.LS_DETAIL,
-                caps = true,
-            ).apply { gravity = Gravity.CENTER }
-
             cell.addView(
-                glyph,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ).apply { rightMargin = GLYPH_GAP_PX },
+                View(this).apply {
+                    background = GradientDrawable().apply {
+                        shape = GradientDrawable.OVAL
+                        setColor(item.color)
+                    }
+                },
+                LinearLayout.LayoutParams(LEGEND_DOT_PX, LEGEND_DOT_PX).apply {
+                    rightMargin = LEGEND_DOT_GAP_PX
+                },
             )
-            cell.addView(
-                caption,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ),
-            )
-            row.addView(
-                cell,
-                LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                ),
-            )
+            cell.addView(label(item.caption, SZ_LEGEND, Ui.textSecondary, 0f))
+            row.addView(cell)
         }
         return row
     }
 
-    // ---------- данные (сохранено из v1) ----------
+    /** Две плашки метрик: число 44 px тонким шрифтом, подпись 18 px под ним. */
+    private fun buildChips(): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        chipValue1 = label("—", SZ_CHIP_VALUE, Ui.text, 0f).apply { typeface = Ui.clockTypeface() }
+        chipLabel1 = label("эффективность", SZ_CHIP_LABEL, Ui.textSecondary, 0f)
+        chipValue2 = label("—", SZ_CHIP_VALUE, Ui.text, 0f).apply { typeface = Ui.clockTypeface() }
+        chipLabel2 = label("пробуждений", SZ_CHIP_LABEL, Ui.textSecondary, 0f)
+        row.addView(
+            chip(chipValue1, chipLabel1),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                rightMargin = CHIP_GAP_PX / 2
+            },
+        )
+        row.addView(
+            chip(chipValue2, chipLabel2),
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
+                leftMargin = CHIP_GAP_PX / 2
+            },
+        )
+        return row
+    }
+
+    /** Плашка: поверхность `Ui.surface`, обводка `Ui.stroke`, радиус 14 dp. */
+    private fun chip(value: TextView, caption: TextView): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(dp(CHIP_PAD_X_DP), dp(CHIP_PAD_Y_DP), dp(CHIP_PAD_X_DP), dp(CHIP_PAD_Y_DP))
+            background = GradientDrawable().apply {
+                cornerRadius = CHIP_RADIUS_PX
+                setColor(Ui.surface)
+                setStroke(2, Ui.stroke)
+            }
+            addView(value)
+            addView(caption)
+        }
+
+    // ---------- подгонка кегля (защита от обрезки текста) ----------
+
+    /** Максимальная ширина строки на этом кегле, включая трекинг (в Paint его нет). */
+    private fun measure(text: String, sizePx: Float, tracking: Float): Float {
+        fitPaint.textSize = sizePx
+        return fitPaint.measureText(text) + sizePx * tracking * text.length
+    }
+
+    /**
+     * Уменьшает кегль, пока все строки не влезут в [maxWidth]. Благодаря этому
+     * в полосе не бывает ни многоточия, ни обрезанного по высоте текста.
+     */
+    private fun fitSize(view: TextView, lines: List<String>, maxWidth: Float, minPx: Float) {
+        val filled = lines.filter { it.isNotEmpty() }
+        if (filled.isEmpty() || maxWidth <= 0f) return
+        fitPaint.typeface = view.typeface
+        var size = view.textSize
+        while (size > minPx) {
+            val widest = filled.maxOf { measure(it, size, view.letterSpacing) }
+            if (widest <= maxWidth) break
+            size -= 1f
+        }
+        view.setTextSize(TypedValue.COMPLEX_UNIT_PX, size)
+    }
+
+    /** Подгонка однострочной подписи под ширину её полосы. */
+    private fun fitOneLine(view: TextView, minPx: Float) {
+        val lp = view.layoutParams
+        if (lp == null || lp.width <= 0) return
+        fitSize(view, listOf(view.text.toString()), lp.width - TEXT_PAD_PX, minPx)
+    }
+
+    /** Подгонка плашек метрик: и число, и подпись — по внутренней ширине плашки. */
+    private fun fitChips() {
+        val inner = (W_CHIPS - CHIP_GAP_PX) / 2f - 2f * dp(CHIP_PAD_X_DP)
+        fitSize(chipValue1, listOf(chipValue1.text.toString()), inner, MIN_CHIP_VALUE)
+        fitSize(chipValue2, listOf(chipValue2.text.toString()), inner, MIN_CHIP_VALUE)
+        fitSize(chipLabel1, listOf(chipLabel1.text.toString()), inner, MIN_CHIP_LABEL)
+        fitSize(chipLabel2, listOf(chipLabel2.text.toString()), inner, MIN_CHIP_LABEL)
+    }
+
+    // ---------- данные (не менялись с v1) ----------
 
     private fun load() {
         Thread {
@@ -344,42 +406,70 @@ class StatsActivity : ComponentActivity() {
     private fun render(file: File?, n: SleepStats.Night?) {
         chart.setNight(n)
         if (file == null || n == null) {
-            // Нет лога: гипнограмма рисует «НЕТ ДАННЫХ», метрики и фаза — прочерк.
-            metricsView.text = "—"
-            fitText(metricsView, Ui.SZ_METRICS)
-            wakeValue.text = "—"
-            fitText(wakeValue, Ui.SZ_BIG)
+            // Нет лога — «нет данных» словами, а не пустые места (урок v2).
+            wakeView.text = "нет данных"
+            wakeView.setTextColor(Ui.textSecondary)
+            fitOneLine(wakeView, MIN_WAKE)
+            chipValue1.text = "—"
+            chipValue2.text = "—"
+            fitChips()
+            setSummary(
+                listOf(
+                    "ночного лога нет · probe_*.csv не найден",
+                    "включи ночь на главном экране",
+                ),
+            )
             return
         }
-        metricsView.text = metricsText(n)
-        fitText(metricsView, Ui.SZ_METRICS)
-        wakeValue.text = wakePhaseText(n.wakePhase)
-        fitText(wakeValue, Ui.SZ_BIG)
+
+        // Фаза, в которой разбудил будильник: подпись через PhaseEstimator (читаемо,
+        // а не кодом из CSV) и пульс в этот момент.
+        val wake = buildString {
+            append("разбудил: ").append(PhaseEstimator.label(n.wakePhase))
+            if (n.wakePhase != SleepStats.Stage.UNKNOWN && n.wakeHr > 0) {
+                append(" · ").append(n.wakeHr).append(" уд")
+            }
+        }
+        wakeView.text = wake
+        wakeView.setTextColor(
+            if (n.wakePhase == SleepStats.Stage.UNKNOWN) Ui.textSecondary else Ui.accent,
+        )
+        fitOneLine(wakeView, MIN_WAKE)
+
+        chipValue1.text = "${n.efficiencyPct.toInt()}%"
+        chipValue2.text = "${n.awakenings}"
+        fitChips()
+
+        // Сводка: две фиксированные строки. Имя файла — только если влезает: экран
+        // вторичный, а полоса ограничена дугой круга.
+        val start = timeFmt.format(Instant.ofEpochMilli(n.startTs))
+        val end = timeFmt.format(Instant.ofEpochMilli(n.endTs))
+        val cov = n.coveragePct.toInt()
+        val covMark = if (cov < 95) " ⚠" else " ✓"
+        val line1 = "$start–$end · ${hm(n.durationMin)} · покрытие $cov%$covMark"
+        val hrPart = if (n.hrMin > 0) "пульс ${n.hrMin}–${n.hrMax} ср.${n.hrAvg}" else "пульс н/д"
+        val batPart = if (n.batteryStart in 0..100 && n.batteryEnd in 0..100) {
+            "бат. ${n.batteryStart}→${n.batteryEnd}%"
+        } else {
+            "бат. н/д"
+        }
+        var line2 = "$hrPart · $batPart"
+        val filePart = " · файл " + file.name.removePrefix("probe_").removeSuffix(".csv")
+        // Имя файла — служебное: показываем, только если строка с ним влезает в полосу.
+        fitPaint.typeface = Ui.bodyTypeface()
+        if (measure(line2 + filePart, SZ_SUMMARY, 0f) <= W_SUMMARY - TEXT_PAD_PX) {
+            line2 += filePart
+        }
+        setSummary(listOf(line1, line2))
     }
 
-    /** «6Ч 42М · 58 УД · 92%»: сон · средний пульс · эффективность; неизвестное — «—». */
-    private fun metricsText(n: SleepStats.Night): String {
-        val duration = hmCaps(n.durationMin)
-        val hr = if (n.hrAvg > 0) "${n.hrAvg} УД" else "—"
-        val eff = if (n.efficiencyPct > 0.0) "${n.efficiencyPct.toInt()}%" else "—"
-        return "$duration · $hr · $eff"
+    private fun setSummary(lines: List<String>) {
+        summaryView.text = lines.joinToString("\n")
+        fitSize(summaryView, lines, W_SUMMARY - TEXT_PAD_PX, MIN_SUMMARY)
     }
 
-    private fun hmCaps(totalMin: Int): String {
-        val m = totalMin.coerceAtLeast(0)
-        return "${m / 60}Ч ${m % 60}М"
-    }
-
-    /**
-     * Фаза подъёма в 52 px при ширине ≤ 187 px: полное «БОДРСТВОВАНИЕ» физически не влезает,
-     * поэтому короткие формы (≤ 5 символов) — 52 px остаётся кеглем героя этой строки.
-     */
-    private fun wakePhaseText(stage: SleepStats.Stage): String = when (stage) {
-        SleepStats.Stage.DEEP -> "ГЛУБ."
-        SleepStats.Stage.LIGHT -> "ЛЁГК."
-        SleepStats.Stage.AWAKE -> "БОДР."
-        SleepStats.Stage.UNKNOWN -> "—"
-    }
+    private fun hm(minutes: Int): String =
+        if (minutes < 60) "${minutes}м" else "${minutes / 60}ч ${minutes % 60}м"
 
     /**
      * Выбор файла ночи: приоритет — файл, в котором есть строка срабатывания с записанной
@@ -408,16 +498,106 @@ class StatsActivity : ComponentActivity() {
         false
     }
 
+    // ---------- самопроверка геометрии на устройстве ----------
+
+    /**
+     * Проверка R1 на живой вёрстке: каждый блок контента и индикатор обязаны лежать
+     * внутри круга `r = 209`. Нарушение — в [UiLog], его видно из probe-лога.
+     * Ширины уже посчитаны через [RoundScreen.safeRowWidth]; это контроль, а не расчёт.
+     */
+    private fun verifyWithinCircle() {
+        val views = ArrayList<View>()
+        for (i in 0 until content.childCount) views.add(content.getChildAt(i))
+        if (::dots.isInitialized) views.add(dots)
+        views.forEachIndexed { index, view ->
+            if (view.width <= 0 || view.visibility != View.VISIBLE) return@forEachIndexed
+            val inside = RoundScreen.fits(
+                view.left.toFloat(),
+                view.top.toFloat(),
+                view.right.toFloat(),
+                view.bottom.toFloat(),
+            )
+            if (!inside) {
+                UiLog.add(
+                    "stats geometry: #$index [${view.left},${view.top}]" +
+                        "[${view.right},${view.bottom}] вне r=${Ui.SAFE_RADIUS_PX}",
+                )
+            }
+        }
+    }
+
+    private fun dp(v: Int): Int = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics,
+    ).toInt()
+
     private companion object {
+        // ---------- вертикальные полосы, px (1 dp = 2 px на OPW2 466×466) ----------
+        const val BAND_TITLE_TOP = 90
+        const val BAND_TITLE_BOTTOM = 118
+        const val BAND_CHART_TOP = 122
+        const val BAND_CHART_BOTTOM = 214
+        const val BAND_LEGEND_TOP = 218
+        const val BAND_LEGEND_BOTTOM = 240
+        const val BAND_WAKE_TOP = 244
+        const val BAND_WAKE_BOTTOM = 268
+        const val BAND_SUMMARY_TOP = 272
+        const val BAND_SUMMARY_BOTTOM = 318
+        const val BAND_CHIPS_TOP = 322
+        const val BAND_CHIPS_BOTTOM = 400
+        const val BAND_DOTS_TOP = 414
+        const val BAND_DOTS_BOTTOM = 434
+
+        // ---------- ширины полос, px (все ≤ safeRowWidth своей полосы) ----------
+        const val W_TITLE = 260f
+        const val W_CHART = 336f
+        const val W_LEGEND = 300f
+        const val W_WAKE = 312f
+        const val W_SUMMARY = 330f
+        const val W_CHIPS = 242f
+        const val W_DOTS = 64f
+
+        // ---------- кегли, px ----------
+        const val SZ_TITLE = 22f
+        const val SZ_LEGEND = 18f
+        const val SZ_WAKE = 20f
+        const val SZ_SUMMARY = 18f
+        const val SZ_CHIP_VALUE = 44f
+        const val SZ_CHIP_LABEL = 18f
+
+        /** Ниже этих кеглей не опускаемся: дизайн-минимум 16 px. */
+        const val MIN_TITLE = 18f
+        const val MIN_WAKE = 18f
+        const val MIN_SUMMARY = 16f
+        const val MIN_CHIP_LABEL = 15f
+        const val MIN_CHIP_VALUE = 30f
+
+        /** Зазор от прямоугольника полосы до дуги и запас внутри TextView. */
+        const val EDGE_MARGIN_PX = 8f
+        const val TEXT_PAD_PX = 6f
+
+        /** Трекинг заголовка — как у v1-заголовков приложения. */
+        const val LS_TITLE = 0.14f
+
+        /** Сводка: две строки, межстрочный зазор 2 px. */
+        const val SUMMARY_LINES = 2
+        const val SUMMARY_LINE_GAP_PX = 2f
+
+        // ---------- индикатор раздела ----------
+        const val SECTIONS_TOTAL = 3
+
+        // ---------- плашки ----------
+        const val CHIP_GAP_PX = 6
+        const val CHIP_RADIUS_PX = 28f
+        const val CHIP_PAD_X_DP = 2
+        const val CHIP_PAD_Y_DP = 1
+        const val LEGEND_DOT_PX = 12
+        const val LEGEND_DOT_GAP_PX = 6
+        const val LEGEND_GAP_PX = 16
+
+        /** Задержка отладочного входа в AOD (`--ez force_ambient true`). */
         const val DEMO_AMBIENT_DELAY_MS = 400L
 
-        /** Зазор между прямоугольником полосы и окружностью обода r = 188. */
-        const val ROW_SIDE_PAD_PX = 8f
-
-        /** Запас внутри TextView при ужатии кегля. */
-        const val TEXT_SIDE_PAD_PX = 2
-
-        const val LEGEND_GAP_PX = 14
-        const val GLYPH_GAP_PX = 2
+        /** Задержка самопроверки геометрии: после первой раскладки. */
+        const val GEOMETRY_CHECK_DELAY_MS = 300L
     }
 }
