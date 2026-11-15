@@ -114,7 +114,8 @@ class SectionSwipe(
 
     private fun commit(forward: Boolean) {
         committed = true
-        activity.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        // У Activity нет своего performHapticFeedback — вибрируем через decorView.
+        activity.window?.decorView?.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
         val target = if (forward) Sections.next(index) else Sections.prev(index)
         val w = if (content.width > 0) content.width.toFloat() else 466f
         // Доводка до края (180 мс), затем старт следующего раздела со slide-переходом 220 мс.

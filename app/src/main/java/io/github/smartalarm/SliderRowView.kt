@@ -3,20 +3,24 @@ package io.github.smartalarm
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.RectF
 import android.os.Handler
 import android.os.Looper
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Горизонтальный слайдер для выбора часа/минуты.
+ * Горизонтальный слайдер выбора часа/минуты в языке v2 «Ночной инструмент».
  *
- * Рисуется вручную: на круглом экране важны крупная тач-зона (высота строки 34 dp)
- * и попадание в среднюю полосу круга по ширине. Тянуть можно пальцем или ротари
- * (события скролла приходят как MotionEvent).
+ * Никаких «капсул» и кружков: дорожка — волосяная линейка 2 px, заполнение — 2 px янтаря,
+ * ползунок — вертикальная риска 4 × 36 px (гравированный штрих, а не точка). Подпись — caps
+ * `row_label`, значение — `row_value`.
+ *
+ * Ввод: горизонтальный свайп системой забирается как «назад», поэтому работают тап по шкале
+ * (сразу нужное значение по X), вертикальная подстройка пальцем и долгое нажатие (шаг 5 ↔ 1).
+ * Высота строки 72 px — вся площадь является hit-зоной (R3).
  */
 class SliderRowView @JvmOverloads constructor(
     context: Context,
@@ -24,8 +28,13 @@ class SliderRowView @JvmOverloads constructor(
     defStyle: Int = 0,
 ) : View(context, attrs, defStyle) {
 
+    /** Подпись строки; рисуется капителью — храним сразу в верхнем регистре. */
     var label: String = ""
-        set(v) { field = v; invalidate() }
+        set(v) {
+            field = v.uppercase()
+            invalidate()
+        }
+
     var minValue: Int = 0
     var maxValue: Int = 23
     var step: Int = 1
@@ -47,24 +56,22 @@ class SliderRowView @JvmOverloads constructor(
         onLongPress?.invoke()
     }
 
-    private val trackRect = RectF()
-    private val trackPaint = Paint().apply { isAntiAlias = true; color = Ui.surfaceHi }
-    private val fillPaint = Paint().apply { isAntiAlias = true; color = Ui.accent }
-    private val knobPaint = Paint().apply { isAntiAlias = true; color = Ui.text }
-    private val labelPaint = Paint().apply {
-        isAntiAlias = true
-        color = Ui.textSecondary
-        typeface = Ui.labelTypeface()
+    private val trackPaint = Ui.fillPaint(android.graphics.Color.parseColor(Ui.RULE_STRONG))
+    private val fillPaint = Ui.fillPaint(Ui.ember)
+    private val knobPaint = Ui.fillPaint(Ui.ember)
+
+    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Ui.condensed()
+        textSize = Ui.SZ_ROW_LABEL
+        letterSpacing = Ui.LS_ROW_LABEL
+        textAlign = Paint.Align.LEFT
     }
-    private val valuePaint = Paint().apply {
-        isAntiAlias = true
-        color = Ui.text
-        typeface = Ui.labelTypeface()
+    private val valuePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Ui.condensed()
+        textSize = Ui.SZ_ROW_VALUE
+        letterSpacing = VALUE_TRACKING
         textAlign = Paint.Align.RIGHT
     }
-
-    private val padH = 6f
-    private val knobR = 14f
 
     private var downX = 0f
     private var downY = 0f
@@ -79,37 +86,37 @@ class SliderRowView @JvmOverloads constructor(
         return (value - minValue).toFloat() / range
     }
 
+    private fun labelFor(v: Int): String = String.format(java.util.Locale.US, "%02d", v)
+
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
+        if (w <= 0f || h <= 0f) return
 
-        labelPaint.textSize = h * 0.30f
-        valuePaint.textSize = h * 0.34f
-        val base = h * 0.36f
-        canvas.drawText(label, padH, base, labelPaint)
-        canvas.drawText(labelFor(value), w - padH, base, valuePaint)
+        val nudge = h / LOGICAL_H
+        labelPaint.textSize = Ui.SZ_ROW_LABEL * nudge
+        valuePaint.textSize = Ui.SZ_ROW_VALUE * nudge
 
-        val trackH = h * 0.16f
-        val cy = h * 0.74f
-        val left = padH + knobR
-        val right = w - padH - knobR
-        trackRect.set(left, cy - trackH / 2f, right, cy + trackH / 2f)
-        canvas.drawRoundRect(trackRect, trackH / 2f, trackH / 2f, trackPaint)
+        // Полоса текста: подпись слева, значение справа, выровнены по базовой линии.
+        val textBase = h * TEXT_BASE
+        canvas.drawText(label, PAD_PX, textBase, labelPaint)
+        canvas.drawText(labelFor(value), w - PAD_PX, textBase, valuePaint)
+
+        // Дорожка у нижней кромки: риска ползунка стоит на ней и упирается в низ строки.
+        val cy = h - RISER_H / 2f
+        val left = PAD_PX
+        val right = w - PAD_PX
+        canvas.drawRect(left, cy - TRACK_W / 2f, right, cy + TRACK_W / 2f, trackPaint)
 
         val x = left + (right - left) * fraction()
-        trackRect.set(left, cy - trackH / 2f, x, cy + trackH / 2f)
-        canvas.drawRoundRect(trackRect, trackH / 2f, trackH / 2f, fillPaint)
-        canvas.drawCircle(x, cy, knobR, knobPaint)
+        canvas.drawRect(left, cy - TRACK_W / 2f, x, cy + TRACK_W / 2f, fillPaint)
+        canvas.drawRect(
+            x - RISER_W / 2f, cy - RISER_H / 2f,
+            x + RISER_W / 2f, cy + RISER_H / 2f,
+            knobPaint,
+        )
     }
 
-    private fun labelFor(v: Int): String = String.format(java.util.Locale.US, "%02d", v)
-
-    /**
-     * Управление без горизонтального свайпа: он на Wear OS перехватывается системным
-     * жестом «назад» и закрывает экран. Поэтому:
-     *  - тап по шкале — сразу нужное значение (позиция X);
-     *  - вертикальное движение пальцем — точная подстройка (вверх больше, вниз меньше).
-     */
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -124,9 +131,9 @@ class SliderRowView @JvmOverloads constructor(
 
             MotionEvent.ACTION_MOVE -> {
                 val dy = downY - event.y
-                val dx = kotlin.math.abs(event.x - downX)
-                if (kotlin.math.abs(dy) > 12f || dx > 12f) handler.removeCallbacks(longPressRunnable)
-                if (!dragging && kotlin.math.abs(dy) > 12f && kotlin.math.abs(dy) > dx) {
+                val dx = abs(event.x - downX)
+                if (abs(dy) > 12f || dx > 12f) handler.removeCallbacks(longPressRunnable)
+                if (!dragging && abs(dy) > 12f && abs(dy) > dx) {
                     dragging = true
                 }
                 if (dragging) {
@@ -157,8 +164,8 @@ class SliderRowView @JvmOverloads constructor(
     }
 
     private fun applyX(x: Float) {
-        val left = padH + knobR
-        val right = width - padH - knobR
+        val left = PAD_PX
+        val right = width - PAD_PX
         val len = (right - left).coerceAtLeast(1f)
         val f = ((x - left) / len).coerceIn(0f, 1f)
         val raw = minValue + f * (maxValue - minValue)
@@ -167,5 +174,22 @@ class SliderRowView @JvmOverloads constructor(
             value = snapped
             onChange?.invoke(snapped)
         }
+    }
+
+    private companion object {
+        const val LOGICAL_H = 72f
+
+        /** Отступ подписи/значения и краёв дорожки — 16 px (8 dp). */
+        const val PAD_PX = 16f
+
+        /** Базовая линия текста: подпись 26 px и значение 34 px сидят на одной линии. */
+        const val TEXT_BASE = 0.375f
+
+        const val TRACK_W = 2f
+        const val RISER_W = 4f
+        const val RISER_H = 36f
+
+        /** Трекинг значения — 0.02 em (§4.4). */
+        const val VALUE_TRACKING = 0.02f
     }
 }
