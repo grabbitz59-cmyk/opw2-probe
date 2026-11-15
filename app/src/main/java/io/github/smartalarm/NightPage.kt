@@ -411,9 +411,8 @@ class NightPage(host: SectionsActivity) : SectionPage(host) {
         )
         fitOneLine(wakeView, MIN_WAKE)
 
-        chipValue1.text = "${n.efficiencyPct.toInt()}%"
-        chipValue2.text = "${n.awakenings}"
-        fitChips()
+        // Плашек метрик на экране больше нет (место отдано графику), поэтому chipValue1/2
+        // не трогаем: обращение к ним падало с UninitializedPropertyAccessException.
 
         // Сводка: две фиксированные строки. Имя файла — только если влезает: экран
         // вторичный, а полоса ограничена дугой круга.
