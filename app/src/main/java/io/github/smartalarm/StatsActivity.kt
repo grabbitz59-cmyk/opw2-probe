@@ -142,12 +142,12 @@ class StatsActivity : ComponentActivity() {
             setPadding(dp(2), dp(2), dp(2), dp(2))
         }
 
-        root.addView(text("ПРОШЛАЯ НОЧЬ", 11f, Ui.ACCENT).apply { letterSpacing = 0.16f })
+        root.addView(text("ПРОШЛАЯ НОЧЬ", 10f, Ui.ACCENT).apply { letterSpacing = 0.14f })
 
         chart = SleepChartView(this)
         root.addView(
             chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(104))
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(80))
                 .apply { topMargin = dp(6) },
         )
 
@@ -161,7 +161,7 @@ class StatsActivity : ComponentActivity() {
         // Две «плашки» с главными числами
         root.addView(
             metricsRow(),
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(64))
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56))
                 .apply { topMargin = dp(8) },
         )
 
@@ -206,7 +206,7 @@ class StatsActivity : ComponentActivity() {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = verticalGradient()
-            setPadding(inset, dp(34), inset, dp(24))
+            setPadding(inset, dp(40), inset, dp(48))
         }
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
@@ -260,7 +260,7 @@ class StatsActivity : ComponentActivity() {
             val cell = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(4), 0, dp(4), 0)
+                setPadding(dp(2), 0, dp(2), 0)
             }
             cell.addView(android.view.View(this).apply {
                 background = android.graphics.drawable.GradientDrawable().apply {
@@ -281,9 +281,9 @@ class StatsActivity : ComponentActivity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
-        metricValue = text("—", 22f, Ui.TEXT).apply { typeface = Ui.clockTypeface() }
+        metricValue = text("—", 20f, Ui.TEXT).apply { typeface = Ui.clockTypeface() }
         metricLabel = text("эффективность", 8f, Ui.TEXT_SECONDARY)
-        metricValue2 = text("—", 22f, Ui.TEXT).apply { typeface = Ui.clockTypeface() }
+        metricValue2 = text("—", 20f, Ui.TEXT).apply { typeface = Ui.clockTypeface() }
         metricLabel2 = text("пробуждений", 8f, Ui.TEXT_SECONDARY)
         row.addView(chip(metricValue, metricLabel), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { rightMargin = dp(4) })
         row.addView(chip(metricValue2, metricLabel2), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply { leftMargin = dp(4) })

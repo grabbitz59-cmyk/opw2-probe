@@ -175,7 +175,7 @@ class StatusActivity : ComponentActivity() {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = verticalGradient()
-            setPadding(inset, dp(34), inset, dp(24))
+            setPadding(inset, dp(40), inset, dp(48))
             addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         }
         contentView = outer
