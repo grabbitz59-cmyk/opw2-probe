@@ -116,6 +116,7 @@ class NightDialView @JvmOverloads constructor(
 
     private val tickMinor = Ui.strokePaint(Ui.bezelMinor, TICK_MINOR_W)
     private val tickMajor = Ui.strokePaint(Ui.bezelMajor, TICK_MAJOR_W)
+    private val ringPaint = Ui.strokePaint(Ui.paper3, 1f)
     private val nowMarker = Ui.strokePaint(Ui.paper2, 3f)
     private val arcPaint = Ui.strokePaint(Ui.ember, ARC_W).apply { strokeCap = Paint.Cap.ROUND }
     private val dotPaint = Ui.fillPaint(Ui.emberHot)
@@ -257,7 +258,7 @@ class NightDialView @JvmOverloads constructor(
         val rIn = TICK_R_IN * k
         val rMinOut = TICK_R_MINOR_OUT * k
         val rMajOut = Ui.BEZEL_OUT * k
-        val alpha = if (dimmed) 76 else 255
+        val alpha = if (dimmed) AMB_TICK_ALPHA else 255
         tickMinor.alpha = alpha
         tickMajor.alpha = alpha
         for (i in 0 until TICKS) {
@@ -271,6 +272,14 @@ class NightDialView @JvmOverloads constructor(
                 cx + outer * ca, cy + outer * sa,
                 if (major) tickMajor else tickMinor,
             )
+        }
+        if (dimmed) {
+            // R9: в AOD на экране должно остаться «тонкое кольцо». Риски при 30 % яркости дают
+            // на чёрном около (10,11,12) — это невидимо, поэтому кольцо рисуется отдельно,
+            // 1 px бумагой с alpha AMB_RING_ALPHA, и шкала поверх него читается как шкала.
+            ringPaint.strokeWidth = 1f * k
+            ringPaint.color = Ui.alpha(Ui.paper3, AMB_RING_ALPHA)
+            canvas.drawCircle(cx, cy, AMB_RING_R * k, ringPaint)
         }
         if (nowMinutes >= 0) {
             val a = Math.toRadians(angleOf(nowMinutes).toDouble())
@@ -506,5 +515,10 @@ class NightDialView @JvmOverloads constructor(
         const val AMB_NOW_TOP = 300f
         const val AMB_NOW_BOTTOM = 330f
         const val AMB_NOW_SIZE = 24f
+
+        /** AOD: риски светлее обычного «гашения», плюс отдельное тонкое кольцо (R9). */
+        const val AMB_TICK_ALPHA = 150
+        const val AMB_RING_ALPHA = 110
+        const val AMB_RING_R = 200f
     }
 }
