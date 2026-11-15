@@ -147,8 +147,8 @@ class StatsActivity : ComponentActivity() {
         chart = SleepChartView(this)
         root.addView(
             chart,
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(80))
-                .apply { topMargin = dp(6) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(70))
+                .apply { topMargin = dp(4) },
         )
 
         // Легенда фаз: цветные точки + подписи
@@ -206,7 +206,7 @@ class StatsActivity : ComponentActivity() {
         val outer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = verticalGradient()
-            setPadding(inset, dp(40), inset, dp(48))
+            setPadding(inset, dp(20), inset, dp(28))
         }
         val scroll = android.widget.ScrollView(this).apply {
             isFillViewport = true
