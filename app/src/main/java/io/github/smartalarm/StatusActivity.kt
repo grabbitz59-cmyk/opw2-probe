@@ -149,7 +149,9 @@ class StatusActivity : ComponentActivity() {
             sizePx = Ui.SZ_TELEMETRY_SMALL
             tracking = Ui.LS_TELEMETRY
             color = Ui.paper3
-            setOnClickListener { requestMissingPerms() }
+            // Телеметрия — только сообщает (R3: высота 26 px < 72 px, поэтому не тапается).
+            // Запрос разрешений делает рычаг на экране 1: на «Пульте» второго действия нет.
+            isClickable = false
         }
         root.addView(telemetry1, band(TELE1_TOP, TELE_H, TELE1_W))
 

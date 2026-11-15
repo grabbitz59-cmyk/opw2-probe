@@ -2,15 +2,19 @@ package io.github.smartalarm
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.util.AttributeSet
 import android.view.View
 
 /**
- * Индикатор раздела: три риски в полосе `y 42…54` (см. docs/design-v2.md §3).
+ * Индикатор раздела: три риски в полосе `y 60…72` (см. docs/design-v2.md §3, §4.5).
  *
- * Заменяет точки v1 (`PageDotsView`), которые лежали в нижней дуге круга, наезжали на контент
- * и были выключены на всех экранах. Риски — часть гравировки: активная янтарная и длиннее,
- * неактивные — 8 px тёмно-серые. Анимации нет: смена раздела = смена экрана.
+ * Заменяет точки нижней дуги из v1, которые наезжали на контент и были выключены на всех
+ * экранах. Риски — часть гравировки: активная янтарная и длиннее, неактивные — короткие
+ * тёмно-серые. Анимации нет: смена раздела = смена экрана.
+ *
+ * Группа центрируется по фактической сумме длин (активная риска может стоять в любой из трёх
+ * позиций, поэтому просто «64 = 16 + 12 + 8 + 12 + 16» не работает).
  */
 class SectionIndexView @JvmOverloads constructor(
     context: Context,
@@ -26,12 +30,8 @@ class SectionIndexView @JvmOverloads constructor(
             invalidate()
         }
 
-    private val activePaint = Ui.strokePaint(Ui.ember, THICKNESS).apply {
-        strokeCap = android.graphics.Paint.Cap.ROUND
-    }
-    private val idlePaint = Ui.strokePaint(IDLE_COLOR, THICKNESS).apply {
-        strokeCap = android.graphics.Paint.Cap.ROUND
-    }
+    private val activePaint = Ui.strokePaint(Ui.ember, THICKNESS).apply { strokeCap = Paint.Cap.ROUND }
+    private val idlePaint = Ui.strokePaint(IDLE_COLOR, THICKNESS).apply { strokeCap = Paint.Cap.ROUND }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         setMeasuredDimension(WIDTH_PX, HEIGHT_PX)
@@ -39,14 +39,13 @@ class SectionIndexView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         val cy = height / 2f
-        // Центрируем группу: 3 риски, между ними STEP − THICKNESS.
-        val total = 2 * (WIDTH_ACTIVE + STEP) + WIDTH_IDLE
+        val widths = FloatArray(3) { if (it == active - 1) WIDTH_ACTIVE else WIDTH_IDLE }
+        val total = widths.sum() + STEP * 2
         var x = (width - total) / 2f
-        for (i in 1..3) {
-            val isActive = i == active
-            val len = if (isActive) WIDTH_ACTIVE else WIDTH_IDLE
-            canvas.drawLine(x, cy, x + len, cy, if (isActive) activePaint else idlePaint)
-            x += len + STEP
+        for (i in 0 until 3) {
+            val isActive = i == active - 1
+            canvas.drawLine(x, cy, x + widths[i], cy, if (isActive) activePaint else idlePaint)
+            x += widths[i] + STEP
         }
     }
 
@@ -57,7 +56,7 @@ class SectionIndexView @JvmOverloads constructor(
         const val WIDTH_IDLE = 8f
         const val THICKNESS = 2f
 
-        /** 12 px зазор между рисками. */
+        /** 12 px зазор между рисками; группа при активной крайней = 56 px. */
         const val STEP = 12f
         const val IDLE_COLOR = 0xFF2A2D31.toInt()
     }

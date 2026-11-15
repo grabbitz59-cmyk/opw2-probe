@@ -194,27 +194,7 @@ object Ui {
 
     // ---------------------------------------------------------------- совместимость
 
-    // Ниже — имена из v1, которые ещё используются редактором времени
-    // (AlarmSetupActivity/SliderRowView). Значения уже v2: экран редактора выглядит в новом языке.
-
-    val surface: Int get() = emberAsh
-    val surfaceHi: Int get() = Color.parseColor("#332818")
-    val stroke: Int get() = Color.parseColor(RULE)
-    val accent: Int get() = ember
-    val accentDim: Int get() = emberDim
-    val text: Int get() = paper
-    val textSecondary: Int get() = paper2
-    val textTertiary: Int get() = paper3
-    val danger: Int get() = signalStop
-    val phaseNone: Int get() = phaseNoneColor
-
-    /** Фон v1 был градиентом; в v2 он плоский — оба стопа совпадают с [BG]. */
-    const val BG_TOP = BG
-    const val BG_BOTTOM = BG
-
-    fun labelTypeface(): Typeface = condensed()
-
-    fun clockTypeface(): Typeface = condensed()
-
-    fun bodyTypeface(): Typeface = condensed()
+    /** Волосяная линейка повышенной яркости — разделитель блоков и дорожки слайдеров. */
+    val ruleStrong: Int get() = Color.parseColor(RULE_STRONG)
+}
 }

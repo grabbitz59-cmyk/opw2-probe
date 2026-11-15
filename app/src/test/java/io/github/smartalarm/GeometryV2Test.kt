@@ -20,7 +20,7 @@ class GeometryV2Test {
     private val cx = 233.0
     private val cy = 233.0
     private val safe = 209.0
-    private val bezelClear = 196.0
+    private val bezelClear = 188.0
 
     /** Максимальное расстояние от центра до угла прямоугольника. */
     private fun worstCorner(top: Double, bottom: Double, width: Double, left: Double? = null): Double {
@@ -38,7 +38,7 @@ class GeometryV2Test {
     private fun assertSolid(name: String, top: Double, bottom: Double, width: Double, left: Double? = null) {
         val d = worstCorner(top, bottom, width, left)
         assertTrue(
-            "$name: угол на ${"%.1f".format(d)} px от центра, обод начинается на 197",
+            "$name: угол на ${"%.1f".format(d)} px от центра, обод начинается на 188",
             d <= bezelClear,
         )
     }
@@ -103,12 +103,13 @@ class GeometryV2Test {
 
     @Test
     fun `screen 2 elements clear the bezel`() {
-        assertTextBand("заголовок", 96.0, 124.0, 300.0)
+        // Фактические ширины из StatsActivity: 188-правило подрезает табличные максимумы.
+        assertTextBand("заголовок", 96.0, 124.0, 249.0)
         assertSolid("гипнограмма", 164.0, 286.0, 320.0)
         assertSolid("легенда", 292.0, 316.0, 300.0)
-        assertTextBand("метрики", 132.0, 156.0, 320.0)
-        assertTextBand("подпись фазы", 322.0, 346.0, 300.0)
-        assertTextBand("фаза подъёма", 348.0, 396.0, 187.0)
+        assertTextBand("метрики", 132.0, 156.0, 309.0)
+        assertTextBand("подпись фазы", 322.0, 346.0, 292.0)
+        assertTextBand("фаза подъёма", 348.0, 396.0, 179.0)
     }
 
     @Test
@@ -116,18 +117,21 @@ class GeometryV2Test {
         assertSolid("строка 1", 132.0, 204.0, 296.0)
         assertSolid("строка 2", 204.0, 276.0, 296.0)
         assertSolid("строка 3", 276.0, 348.0, 296.0)
-        assertSolid("разделитель", 348.0, 349.0, 296.0)
-        assertSolid("телеметрия 1", 352.0, 374.0, 240.0)
-        assertSolid("телеметрия 2", 378.0, 400.0, 170.0)
-        assertSolid("версия (справа)", 100.0, 122.0, 120.0, left = 263.0)
+        assertSolid("разделитель", 348.0, 349.0, 295.0)
+        assertSolid("телеметрия 1", 350.0, 376.0, 240.0)
+        assertSolid("телеметрия 2", 374.0, 400.0, 170.0)
+        // Версия прижата вправо: правый край на x = 365 (left 245 + 120).
+        assertSolid("версия", 100.0, 122.0, 120.0, left = 245.0)
+        // Заголовок — текстовая полоса: 300 при r = 188 даёт 203.2, поэтому в коде 257.
+        assertTextBand("заголовок ПУЛЬТ", 96.0, 124.0, 257.0)
     }
 
     @Test
     fun `rows are 296 and would not fit at 320`() {
         val d296 = worstCorner(276.0, 348.0, 296.0)
         val d320 = worstCorner(276.0, 348.0, 320.0)
-        assertTrue("296 px на y 348: ${"%.1f".format(d296)} ≤ 196", d296 <= bezelClear)
-        assertTrue("320 px на y 348 не влезает: ${"%.1f".format(d320)} > 196", d320 > bezelClear)
+        assertTrue("296 px на y 348: ${"%.1f".format(d296)} ≤ 188", d296 <= bezelClear)
+        assertTrue("320 px на y 348 не влезает: ${"%.1f".format(d320)} > 188", d320 > bezelClear)
     }
 
     @Test
