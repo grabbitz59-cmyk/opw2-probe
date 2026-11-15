@@ -259,7 +259,7 @@ class NightDialView @JvmOverloads constructor(
             // R9: в AOD остаётся только время и ТОНКОЕ КОЛЬЦО. Риски в AOD не рисуем: замерено
             // на устройстве — кольцо на r=200 занимало 79 % окружности и «съедало» шкалу,
             // получалось ни кольцо, ни шкала. Кольцо ушло на r=193 (между контентом и рисками).
-            ringPaint.strokeWidth = 1f * k
+            ringPaint.strokeWidth = 2f * k
             ringPaint.color = Ui.alpha(Ui.paper3, Bezel.AMB_RING_ALPHA)
             canvas.drawCircle(cx, cy, Bezel.AMB_RING_R * k, ringPaint)
         } else {
