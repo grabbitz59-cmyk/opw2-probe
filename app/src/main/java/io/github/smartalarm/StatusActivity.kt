@@ -439,6 +439,6 @@ class StatusActivity : ComponentActivity() {
         /** Индикатор разделов: полоса 408…428 px (центр точек 418), ширина 64 px. */
         const val DOTS_W = 64
         const val DOTS_H = 20
-        const val DOTS_TOP = Ui.DOTS_TOP_PX + 2
+        const val DOTS_TOP = Ui.DOTS_TOP_PX
     }
 }

@@ -44,7 +44,7 @@ import java.util.Locale
  * | 244…268     | фаза подъёма         | 312 px | 20 px |
  * | 272…318     | сводка (2 строки)    | 330 px | 18 px |
  * | 322…400     | чипы метрик 2 × 118  | 242 px | 44 px число / 18 px подпись |
- * | 412…424     | индикатор раздела    |  64 px | — (PageDotsView) |
+ * | 414…434     | индикатор раздела    |  64 px | — (PageDotsView) |
  *
  * Карточка графика — единственный элемент шире 250 px, и она стоит в средней полосе
  * (`y` 122…214: лимит круга 354 px при 336 используемых). Что было сломано в v1 и чем
@@ -544,8 +544,8 @@ class StatsActivity : ComponentActivity() {
         const val BAND_SUMMARY_BOTTOM = 318
         const val BAND_CHIPS_TOP = 322
         const val BAND_CHIPS_BOTTOM = 400
-        const val BAND_DOTS_TOP = 412
-        const val BAND_DOTS_BOTTOM = 424
+        const val BAND_DOTS_TOP = 414
+        const val BAND_DOTS_BOTTOM = 434
 
         // ---------- ширины полос, px (все ≤ safeRowWidth своей полосы) ----------
         const val W_TITLE = 260f

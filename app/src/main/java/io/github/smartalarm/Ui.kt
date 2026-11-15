@@ -50,8 +50,8 @@ object Ui {
      * Полоса индикатора разделов. В v1 точки стояли на 406…426 и наезжали на контент
      * (на главном — на кнопку); с 412…424 они целиком в круге и ниже контента экранов 2–3.
      */
-    const val DOTS_TOP_PX = 412
-    const val DOTS_BOTTOM_PX = 424
+    const val DOTS_TOP_PX = 414
+    const val DOTS_BOTTOM_PX = 434
 
     val bg: Int get() = Color.parseColor(BG)
     val surface: Int get() = Color.parseColor(SURFACE)
