@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.drawable.ColorDrawable
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
@@ -12,8 +11,11 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.HapticFeedbackConstants
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -22,21 +24,19 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * Раздел 1 «ПОДЪЁМ» — главный экран. Дизайн: `docs/design-v2.md` §3.1, §3.2.
+ * Главный экран по скиллу wear-os-ui:
+ * кольцо прогресса на весь экран, время в центре, под ним — статус, окно и одно действие.
  *
- * Вся приборная панель — один [NightDialView] (обод, шкала, дуга отсчёта, время подъёма,
- * статус, дуга-рычаг). Активность отвечает за состояние и логику, а не за пиксели.
- *
- * Логика не менялась относительно v1: arm/disarm через [AlarmLogic], ночная запись через
- * [NightLogService], подхват системного будильника, разрешения, ambient (AOD), snooze и
- * повтор по дням — снаружи, в тех же сервисах и получателях.
+ * Широкие элементы стоят в средней полосе: у верхней и нижней дуги ширина круга падает
+ * почти до нуля (R1–R2). Вторичный экран (история ночи) — long-press по циферблату.
  */
 class HomeActivity : ComponentActivity() {
 
-    private lateinit var root: FrameLayout
-    private lateinit var content: FrameLayout
-    private lateinit var dial: NightDialView
-    private lateinit var index: SectionIndexView
+    private lateinit var dial: DialView
+    private lateinit var statusView: TextView
+    private lateinit var windowPill: TextView
+    private lateinit var cta: TextView
+    private lateinit var rootFrame: FrameLayout
     private lateinit var swipe: SectionSwipe
     private var ambient: AmbientLifecycleObserver? = null
 
@@ -56,7 +56,10 @@ class HomeActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
         refresh()
+        if (missingPerms().isEmpty()) statusView.text = "разрешения выданы"
     }
+
+    private val screenW: Float get() = resources.displayMetrics.widthPixels.toFloat()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,58 +70,16 @@ class HomeActivity : ComponentActivity() {
         buildUi()
         setupAmbient()
         // Отладка: adb shell am start -n io.github.smartalarm/.HomeActivity --ez force_ambient true
+        // Позволяет увидеть ambient-отрисовку даже при выключенном AOD на устройстве.
         if (intent?.getBooleanExtra("force_ambient", false) == true) {
             handler.postDelayed({ applyAmbient(true) }, 400L)
         }
     }
 
-    // ------------------------------------------------------------------ UI
-
-    private fun buildUi() {
-        root = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
-
-        content = FrameLayout(this).apply { setBackgroundColor(Ui.bg) }
-        root.addView(
-            content,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
-
-        dial = NightDialView(this).apply {
-            onPrimaryTap = { onPrimary() }
-            onTimeTap = { openSetup() }
-        }
-        content.addView(
-            dial,
-            FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT,
-            ),
-        )
-
-        index = SectionIndexView(this).apply { active = Sections.HOME }
-        content.addView(
-            index,
-            FrameLayout.LayoutParams(64, 12).apply {
-                gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                topMargin = Ui.INDEX_TOP.toInt()
-            },
-        )
-
-        swipe = SectionSwipe(this, Sections.HOME, content)
-        setContentView(root)
-    }
-
-    /** Перехватываем жест на уровне Activity: дочерние View сами отсекают тап по слопу. */
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        swipe.handle(ev)
-        return super.dispatchTouchEvent(ev)
-    }
-
-    // ------------------------------------------------------------------ ambient (R9)
-
+    /**
+     * Ambient (AOD) по скиллу wear-os-ui, R9: в покое остаются только время и кольцо,
+     * без кнопок, градиента и пульсации — так экран не выжигает AMOLED.
+     */
     private fun setupAmbient() {
         ambient = AmbientLifecycleObserver(
             this,
@@ -139,18 +100,20 @@ class HomeActivity : ComponentActivity() {
         )
     }
 
-    /**
-     * AOD: чёрный фон, только два времени (подъём и «сейчас»), шкала alpha 30 % и тонкая дуга.
-     * Ни кнопок, ни подписей, ни пульсации — так экран не выжигает AMOLED.
-     */
     private fun applyAmbient(on: Boolean) {
         dial.setDimmed(on)
-        index.visibility = if (on) View.INVISIBLE else View.VISIBLE
-        content.background = if (on) {
-            ColorDrawable(Color.parseColor(Ui.BG_AMBIENT))
+        statusView.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        windowPill.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        cta.visibility = if (on) View.INVISIBLE else View.VISIBLE
+        rootFrame.background = if (on) {
+            android.graphics.drawable.ColorDrawable(android.graphics.Color.parseColor("#0A0A0A"))
         } else {
-            ColorDrawable(Ui.bg)
+            android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(android.graphics.Color.parseColor(Ui.BG_TOP), android.graphics.Color.parseColor(Ui.BG_BOTTOM)),
+            )
         }
+        if (!on) dial.animateRing()
     }
 
     override fun onResume() {
@@ -158,7 +121,10 @@ class HomeActivity : ComponentActivity() {
         hour = Prefs.targetHour(this)
         minute = Prefs.targetMinute(this)
         windowMin = Prefs.windowMin(this)
-        swipe.reset()
+        // Возвращаемся на место после slide-перехода между разделами
+        rootFrame.translationX = 0f
+        rootFrame.alpha = 1f
+        if (::swipe.isInitialized) swipe.reset()
         refresh()
         handler.postDelayed(ticker, 1_000L)
     }
@@ -168,17 +134,159 @@ class HomeActivity : ComponentActivity() {
         super.onPause()
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        swipe.reset()
+    // ---------- UI ----------
+
+    private fun buildUi() {
+        val root = FrameLayout(this).apply {
+            background = android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(Color.parseColor(Ui.BG_TOP), Color.parseColor(Ui.BG_BOTTOM)),
+            )
+        }
+        rootFrame = root
+
+        dial = DialView(this).apply {
+            setOnClickListener { openSetup() }
+            setOnLongClickListener {
+                // Долгое нажатие по циферблату — история ночи (вторая страница карусели)
+                openStats()
+                true
+            }
+        }
+        root.addView(dial, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
+
+        statusView = TextView(this).apply {
+            textSize = 11f
+            typeface = Ui.labelTypeface()
+            letterSpacing = 0.12f
+            setTextColor(Ui.textSecondary)
+            gravity = Gravity.CENTER
+            setSingleLine(true)
+        }
+        root.addView(statusView, overlay(topPx = 200, heightPx = 32))
+
+        windowPill = TextView(this).apply {
+            text = "окно ±$windowMin мин"
+            textSize = 11f
+            typeface = Ui.labelTypeface()
+            letterSpacing = 0.04f
+            gravity = Gravity.CENTER
+            setTextColor(Ui.textSecondary)
+            background = pillBackground()
+            setOnClickListener {
+                windowMin = when (windowMin) { 15 -> 30; 30 -> 45; 45 -> 60; else -> 15 }
+                Prefs.setWindowMin(this@HomeActivity, windowMin)
+                refresh()
+            }
+            // Долгое нажатие — повтор по дням (выкл → будни → все дни).
+            // Отдельная кнопка не нужна: экран по скиллу держит одно главное действие.
+            setOnLongClickListener {
+                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                val next = RepeatDays.nextMask(Prefs.repeatDays(this@HomeActivity))
+                Prefs.setRepeatDays(this@HomeActivity, next)
+                refresh()
+                true
+            }
+        }
+        root.addView(windowPill, overlay(topPx = 244, heightPx = 60))
+
+        cta = TextView(this).apply {
+            textSize = 15f
+            typeface = Ui.labelTypeface()
+            letterSpacing = 0.06f
+            gravity = Gravity.CENTER
+            setTextColor(Ui.onAccent)
+            background = ctaBackground(false)
+            setOnClickListener {
+                performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                onPrimary()
+            }
+        }
+        root.addView(cta, overlay(topPx = 314, heightPx = 96))
+
+        // Листание разделов: свайп влево открывает историю ночи (стабильный проверенный путь).
+        // Карусель (CarouselPager) оставлена в проекте, но выключена: после первого перехода
+        // пейджер перестаёт получать жесты (см. трассировку carousel в alarm_debug.txt).
+        // Следующий заход — на ViewPager2, где доставка касаний решена платформой.
+        setContentView(root)
+        swipe = SectionSwipe(this, Sections.HOME, root)
+        root.post { applyGeometry(root) }
     }
 
-    // ------------------------------------------------------------------ состояние
+    // ---------- листание разделов (R11–R13): циклический свайп 1 → 2 → 3 → 1 ----------
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (::swipe.isInitialized) swipe.handle(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
+    /** Долгое нажатие на циферблате — тот же переход вперёд, что и свайп влево. */
+    private fun openStats() {
+        val intent = Intent(this, StatsActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        startActivity(intent)
+        overridePendingTransition(Sections.animEnter(true), Sections.animExit(true))
+    }
+
+    private fun overlay(topPx: Int, heightPx: Int): FrameLayout.LayoutParams =
+        FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, heightPx).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            topMargin = topPx
+        }
+
+    /** Ширины по геометрии круга нашей модели (R1–R2). */
+    private fun applyGeometry(root: FrameLayout) {
+        fun cap(view: TextView, maxW: Float) {
+            val lp = view.layoutParams as FrameLayout.LayoutParams
+            val top = lp.topMargin.toFloat()
+            val bottom = top + lp.height
+            val safe = RoundScreen.safeRowWidth(top, bottom)
+            lp.width = minOf(maxW, if (safe > 0f) safe else maxW).toInt()
+            view.layoutParams = lp
+        }
+        cap(statusView, 412f)
+        cap(windowPill, 392f)
+        cap(cta, 256f)
+    }
+
+
+    private fun snapBack() {
+        rootFrame.animate().translationX(0f).alpha(1f).setDuration(160L).start()
+    }
 
     /**
-     * Синхронизация с системным будильником часов: если на часах есть «чужой» будильник
-     * (или будильник телефона при включённой синхронизации), а наш не взведён — берём его время.
+     * Циклическая прокрутка: с главного в историю можно уйти в ЛЮБУЮ сторону —
+     * свайп влево или вправо одинаково перелистывает на следующую «страницу».
+     */
+    private fun openStatsWithSlide(toLeft: Boolean) {
+        val target = if (toLeft) -screenW else screenW
+        rootFrame.animate()
+            .translationX(target)
+            .alpha(0.35f)
+            .setDuration(140L)
+            .withEndAction {
+                startActivity(Intent(this, StatsActivity::class.java))
+                if (toLeft) {
+                    overridePendingTransition(R.anim.slide_in_right, R.anim.slide_out_left)
+                } else {
+                    overridePendingTransition(R.anim.slide_in_left, R.anim.slide_out_right)
+                }
+                rootFrame.translationX = 0f
+                rootFrame.alpha = 1f
+            }
+            .start()
+    }
+
+    // ---------- состояние ----------
+
+    /**
+     * Синхронизация с системным будильником часов.
+     *
+     * Если на часах есть «чужой» будильник (собственное приложение часов, а при включённой
+     * синхронизации в паре телефон↔часы — будильник телефона) и наш ещё не взведён,
+     * берём его время как цель умного будильника.
      */
     private fun adoptSystemAlarm() {
         val info = SystemAlarm.read(this) ?: return
@@ -203,76 +311,67 @@ class HomeActivity : ComponentActivity() {
         val armed = isArmed()
         val running = NightLogService.isRunning
         val target = currentTarget()
-        val missing = missingPerms()
 
-        val now = Calendar.getInstance()
-        val nowMin = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
-        val diffMin = ((target - System.currentTimeMillis()) / 60_000L).toInt().coerceAtLeast(0)
-
-        dial.nowText = "СЕЙЧАС " + String.format(Locale.US, "%02d:%02d", nowMin / 60, nowMin % 60)
-        dial.nowMinutes = nowMin
-        dial.targetText = String.format(Locale.US, "%02d:%02d", hour, minute)
+        dial.timeLabel = String.format(Locale.US, "%02d:%02d", hour, minute)
         dial.armed = armed
-        dial.recording = running
-        dial.remainingMinutes = if (armed) diffMin else 0
+        dial.running = running
+        dial.targetAt = target
 
-        // 26 px и без слова «ОКНО» при включённом повторе: строка обязана влезать в круг
-        // (при 30 px и полном тексте концы уходили на r = 211.9 — замерено на устройстве).
-        val repeat = Prefs.repeatDays(this)
-        val windowText = if (repeat == RepeatDays.NONE) {
-            "ОКНО ±$windowMin МИН"
-        } else {
-            "±$windowMin МИН · " + RepeatDays.label(repeat).uppercase()
+        val diffMin = ((target - System.currentTimeMillis()) / 60_000).toInt().coerceAtLeast(0)
+        val tomorrow = Calendar.getInstance().apply { timeInMillis = target }
+            .get(Calendar.DAY_OF_YEAR) != Calendar.getInstance().get(Calendar.DAY_OF_YEAR)
+
+        val missing = missingPerms()
+        statusView.setTextColor(if (missing.isEmpty()) Ui.textSecondary else Ui.danger)
+        statusView.text = when {
+            missing.isNotEmpty() ->
+                "НЕТ ПРАВ: " + missing.joinToString(" · ") { it.substringAfterLast('.') }
+            running -> "ЗАПИСЬ · ${diffMin / 60}Ч ${diffMin % 60}М · ${batteryPct()}%"
+            armed -> "${if (tomorrow) "ЗАВТРА" else "СЕГОДНЯ"} · ${diffMin / 60}Ч ${diffMin % 60}М"
+            else -> "НЕ ВЗВЕДЁН · ${batteryPct()}%"
         }
+
+        val repeat = Prefs.repeatDays(this)
+        windowPill.text = if (repeat == RepeatDays.NONE) "окно ±$windowMin"
+        else "±$windowMin · ${RepeatDays.label(repeat)}"
 
         when {
-            missing.isNotEmpty() -> {
-                dial.stateText = "НЕТ ПРАВ"
-                dial.stateColor = Ui.signalStop
-                dial.detailText = "НУЖНЫ ДАТЧИКИ"
-                dial.leverText = "СПАТЬ"
+            armed && running -> {
+                cta.text = "ОСТАНОВИТЬ"
+                cta.background = ctaBackground(danger = true)
+                cta.setTextColor(Ui.text)
             }
-
-            running -> {
-                dial.stateText = "ЗАПИСЬ · ${batteryPct()}%"
-                dial.stateColor = Ui.ember
-                dial.detailText = windowText
-                dial.leverText = "СТОП"
-            }
-
             armed -> {
-                dial.stateText = if (diffMin == 0) "СЕЙЧАС" else "ВЗВЕДЁН"
-                dial.stateColor = Ui.ember
-                dial.detailText = deltaLabel(diffMin)
-                dial.leverText = "НАЧАТЬ"
+                cta.text = "НАЧАТЬ ЗАПИСЬ"
+                cta.background = ctaBackground(danger = false)
+                cta.setTextColor(Ui.onAccent)
             }
-
             else -> {
-                dial.stateText = "НЕ ВЗВЕДЁН"
-                dial.stateColor = Ui.paper2
-                dial.detailText = windowText
-                dial.leverText = "СПАТЬ"
+                cta.text = "СПАТЬ"
+                cta.background = ctaBackground(danger = false)
+                cta.setTextColor(Ui.onAccent)
             }
         }
-
-        // Экран 1 рисуется на canvas, поэтому в дереве доступности текста нет — отдаём состояние
-        // одной строкой: и TalkBack, и проверка через `uiautomator dump` видят, что на экране (R7).
-        dial.contentDescription = "Подъём " + dial.targetText +
-            ", сейчас " + String.format(Locale.US, "%02d:%02d", nowMin / 60, nowMin % 60) +
-            ", " + dial.stateText + ", " + dial.detailText
     }
 
-    /** «ЧЕРЕЗ 7 Ч 12 М» / «ЧЕРЕЗ 12 М» — словами, как требует R7. */
-    private fun deltaLabel(minutes: Int): String {
-        val hh = minutes / 60
-        val mm = minutes % 60
-        return when {
-            minutes <= 0 -> "СЕЙЧАС"
-            hh == 0 -> "ЧЕРЕЗ $mm М"
-            mm == 0 -> "ЧЕРЕЗ $hh Ч"
-            else -> "ЧЕРЕЗ $hh Ч $mm М"
+    /** Капсула: тёмная поверхность с тонкой обводкой. */
+    private fun pillBackground(): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable().apply {
+            cornerRadius = 30f
+            setColor(Color.parseColor(Ui.SURFACE_HI))
+            setStroke(2, Color.parseColor(Ui.STROKE_HI))
         }
-    }
+
+    /** Главная кнопка: градиент акцента (или красный для «остановить»). */
+    private fun ctaBackground(danger: Boolean): android.graphics.drawable.GradientDrawable =
+        android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT,
+            if (danger) {
+                intArrayOf(Color.parseColor("#FF7A7A"), Color.parseColor(Ui.DANGER_DIM))
+            } else {
+                intArrayOf(Color.parseColor(Ui.ACCENT_FROM), Color.parseColor(Ui.ACCENT_TO))
+            },
+        ).apply { cornerRadius = 48f }
 
     private fun currentTarget(): Long {
         val stored = Prefs.alarmAt(this)
@@ -317,9 +416,8 @@ class HomeActivity : ComponentActivity() {
         -1
     }
 
-    // ------------------------------------------------------------------ действия
+    // ---------- действия ----------
 
-    /** Единственное главное действие экрана — рычаг. */
     private fun onPrimary() {
         if (isArmed() && NightLogService.isRunning) {
             stopNight()
@@ -327,7 +425,8 @@ class HomeActivity : ComponentActivity() {
         }
         val missing = missingPerms()
         if (missing.isNotEmpty()) {
-            // Нет прав: рычаг превращается в запрос разрешений, отдельной кнопки не появляется.
+            statusView.setTextColor(Ui.danger)
+            statusView.text = "сначала разрешения"
             permLauncher.launch(missing.toTypedArray())
             return
         }
@@ -337,6 +436,7 @@ class HomeActivity : ComponentActivity() {
         Prefs.setTargetMinute(this, minute)
         Prefs.setWindowMin(this, windowMin)
         AlarmLogic.arm(this, at, windowMin)
+        dial.animateRing()
         AlarmLogic.log(this, "home arm ${String.format(Locale.US, "%02d:%02d", hour, minute)} w=$windowMin")
 
         val svc = Intent(this, NightLogService::class.java).apply {
@@ -346,12 +446,14 @@ class HomeActivity : ComponentActivity() {
         }
         try {
             ContextCompat.startForegroundService(this, svc)
-        } catch (_: Throwable) {
-            refresh()
+            statusView.text = "запускаю ночь…"
+        } catch (t: Throwable) {
+            statusView.text = "не удалось: ${t.javaClass.simpleName}"
             return
         }
+
         handler.postDelayed({
-            if (!NightLogService.isRunning) AlarmLogic.log(this, "night log did not start")
+            if (!NightLogService.isRunning) statusView.text = "лог НЕ запустился — long-press → история"
             refresh()
         }, 2_500L)
     }
@@ -374,8 +476,17 @@ class HomeActivity : ComponentActivity() {
         handler.postDelayed({ refresh() }, 1_200L)
     }
 
-    /** Редактор времени: тап по времени подъёма или долгое нажатие на приборной панели. */
     private fun openSetup() {
         startActivity(Intent(this, AlarmSetupActivity::class.java))
+    }
+
+    /**
+     * Страховка для карусели: если жест не дошёл (например, его съела система),
+     * кнопка/жест «назад» с истории возвращает на главный, а не закрывает приложение.
+     */
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        @Suppress("DEPRECATION")
+        super.onBackPressed()
     }
 }
