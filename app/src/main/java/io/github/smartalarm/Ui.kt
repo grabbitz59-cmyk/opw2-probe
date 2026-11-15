@@ -57,6 +57,7 @@ object Ui {
     val surface: Int get() = Color.parseColor(SURFACE)
     val surfaceHi: Int get() = Color.parseColor(SURFACE_HI)
     val stroke: Int get() = Color.parseColor(STROKE)
+    val strokeHi: Int get() = Color.parseColor(STROKE_HI)
     val accent: Int get() = Color.parseColor(ACCENT)
     val accentDim: Int get() = Color.parseColor(ACCENT_DIM)
     val accentSoft: Int get() = Color.parseColor(ACCENT_SOFT)
